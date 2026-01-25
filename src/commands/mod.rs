@@ -3,6 +3,7 @@ pub mod cache;
 pub mod dns;
 pub mod firewall;
 pub mod gateway;
+pub mod rum;
 pub mod service_tokens;
 pub mod tunnels;
 pub mod turnstile;

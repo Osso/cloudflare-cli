@@ -7,6 +7,9 @@ use std::path::PathBuf;
 pub struct SiteConfig {
     pub api_token: String,
     pub account_id: String,
+    /// Email for Global API Key auth (if set, uses X-Auth-Key + X-Auth-Email)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -91,6 +94,7 @@ impl Config {
             SiteConfig {
                 api_token: token.to_string(),
                 account_id: account_id.to_string(),
+                email: None,
             },
         );
         if set_default || self.default_site.is_none() {

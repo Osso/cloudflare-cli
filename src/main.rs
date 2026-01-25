@@ -72,6 +72,11 @@ enum Commands {
         #[command(subcommand)]
         action: WaitingRoomCommands,
     },
+    /// Manage Web Analytics (RUM/beacon.min.js)
+    Rum {
+        #[command(subcommand)]
+        action: RumCommands,
+    },
     /// Configure API credentials
     Config {
         #[command(subcommand)]
@@ -150,6 +155,13 @@ enum AppCommands {
     Delete {
         /// Application ID
         app_id: String,
+    },
+    /// Remove a hostname from an Access application
+    RemoveHostname {
+        /// Application ID
+        app_id: String,
+        /// Hostname to remove
+        hostname: String,
     },
 }
 
@@ -256,6 +268,24 @@ enum CacheCommands {
         /// Filter expression (e.g., '(http.host eq "example.com")')
         #[arg(long)]
         expression: String,
+    },
+    /// Update an existing cache rule's expression
+    UpdateRule {
+        /// Zone name (domain) or zone ID
+        zone: String,
+        /// Rule name/description to find
+        #[arg(long)]
+        name: String,
+        /// New filter expression
+        #[arg(long)]
+        expression: String,
+    },
+    /// Delete a cache rule by ID
+    DeleteRule {
+        /// Zone name (domain) or zone ID
+        zone: String,
+        /// Rule ID to delete
+        rule_id: String,
     },
 }
 
@@ -378,6 +408,36 @@ enum WaitingRoomCommands {
         zone: String,
         /// Waiting room ID
         id: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum RumCommands {
+    /// List Web Analytics sites
+    List,
+    /// Show site details
+    Info {
+        /// Web Analytics site (host or site_tag)
+        #[arg(name = "SITE")]
+        rum_site: String,
+    },
+    /// Disable auto-install (stops beacon.min.js injection)
+    Disable {
+        /// Web Analytics site (host or site_tag)
+        #[arg(name = "SITE")]
+        rum_site: String,
+    },
+    /// Enable auto-install (injects beacon.min.js)
+    Enable {
+        /// Web Analytics site (host or site_tag)
+        #[arg(name = "SITE")]
+        rum_site: String,
+    },
+    /// Delete a Web Analytics site
+    Delete {
+        /// Web Analytics site (host or site_tag)
+        #[arg(name = "SITE")]
+        rum_site: String,
     },
 }
 
@@ -522,6 +582,9 @@ async fn main() -> Result<()> {
                     AppCommands::Delete { app_id } => {
                         commands::applications::delete(&client, &app_id).await?
                     }
+                    AppCommands::RemoveHostname { app_id, hostname } => {
+                        commands::applications::remove_hostname(&client, &app_id, &hostname).await?
+                    }
                 },
                 Commands::Tokens { action } => match action {
                     TokenCommands::List => commands::service_tokens::list(&client).await?,
@@ -569,6 +632,12 @@ async fn main() -> Result<()> {
                     }
                     CacheCommands::CreateRule { zone, name, expression } => {
                         commands::cache::create_rule(&client, &zone, &name, &expression).await?
+                    }
+                    CacheCommands::UpdateRule { zone, name, expression } => {
+                        commands::cache::update_rule(&client, &zone, &name, &expression).await?
+                    }
+                    CacheCommands::DeleteRule { zone, rule_id } => {
+                        commands::cache::delete_rule(&client, &zone, &rule_id).await?
                     }
                 },
                 Commands::Firewall { action } => match action {
@@ -637,6 +706,21 @@ async fn main() -> Result<()> {
                     }
                     WaitingRoomCommands::Show { zone, id } => {
                         commands::waiting_room::show(&client, &zone, &id).await?
+                    }
+                },
+                Commands::Rum { action } => match action {
+                    RumCommands::List => commands::rum::list(&client).await?,
+                    RumCommands::Info { rum_site } => {
+                        commands::rum::info(&client, &rum_site).await?
+                    }
+                    RumCommands::Disable { rum_site } => {
+                        commands::rum::disable(&client, &rum_site).await?
+                    }
+                    RumCommands::Enable { rum_site } => {
+                        commands::rum::enable(&client, &rum_site).await?
+                    }
+                    RumCommands::Delete { rum_site } => {
+                        commands::rum::delete(&client, &rum_site).await?
                     }
                 },
                 Commands::Config { .. } => unreachable!(),

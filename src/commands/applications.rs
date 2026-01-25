@@ -160,3 +160,50 @@ pub async fn delete(client: &Client, app_id: &str) -> Result<()> {
 
     Ok(())
 }
+
+#[derive(Debug, Serialize)]
+struct UpdateAppRequest {
+    name: String,
+    #[serde(rename = "type")]
+    app_type: String,
+    self_hosted_domains: Vec<String>,
+}
+
+pub async fn remove_hostname(client: &Client, app_id: &str, hostname: &str) -> Result<()> {
+    let path = format!("/accounts/{}/access/apps/{}", client.account_id(), app_id);
+
+    // Get current app
+    let response: ApiResponse<Application> = client.get(&path).await?;
+    let app = response.result;
+
+    // Remove hostname
+    let initial_len = app.self_hosted_domains.len();
+    let new_domains: Vec<String> = app
+        .self_hosted_domains
+        .clone()
+        .into_iter()
+        .filter(|h| h != hostname)
+        .collect();
+
+    if new_domains.len() == initial_len {
+        anyhow::bail!("Hostname '{}' not found in application '{}'", hostname, app.name);
+    }
+
+    if new_domains.is_empty() {
+        anyhow::bail!(
+            "Cannot remove '{}': it's the last hostname. Delete the application instead.",
+            hostname
+        );
+    }
+
+    // Update app
+    let request = UpdateAppRequest {
+        name: app.name.clone(),
+        app_type: app.app_type.clone(),
+        self_hosted_domains: new_domains,
+    };
+    let _response: ApiResponse<Application> = client.put(&path, &request).await?;
+
+    println!("Removed {} from {}", hostname, app.name);
+    Ok(())
+}

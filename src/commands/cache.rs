@@ -326,3 +326,154 @@ pub async fn create_rule(client: &Client, zone: &str, name: &str, expression: &s
 
     Ok(())
 }
+
+pub async fn update_rule(client: &Client, zone: &str, name: &str, expression: &str) -> Result<()> {
+    let zone_id = find_zone_id(client, zone).await?;
+
+    // Get all rulesets for the zone
+    let list_path = format!("/zones/{}/rulesets", zone_id);
+    let all_rulesets: ApiResponse<Vec<Ruleset>> = client.get(&list_path).await?;
+
+    // Find the cache settings ruleset
+    let cache_ruleset = all_rulesets
+        .result
+        .iter()
+        .find(|r| r.phase == "http_request_cache_settings");
+
+    let ruleset = match cache_ruleset {
+        Some(r) => r,
+        None => bail!("No cache rules ruleset found for zone '{}'", zone),
+    };
+
+    // Get the full ruleset with all rules
+    let get_path = format!("/zones/{}/rulesets/{}", zone_id, ruleset.id);
+    let full_ruleset: ApiResponse<Ruleset> = client.get(&get_path).await?;
+
+    // Find the rule by name (description field)
+    let rule_index = full_ruleset
+        .result
+        .rules
+        .iter()
+        .position(|r| r.description == name);
+
+    let rule_idx = match rule_index {
+        Some(idx) => idx,
+        None => bail!(
+            "Rule '{}' not found. Available rules: {}",
+            name,
+            full_ruleset
+                .result
+                .rules
+                .iter()
+                .map(|r| r.description.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    };
+
+    // Build updated rules list with the new expression for the matching rule
+    let rules: Vec<Value> = full_ruleset
+        .result
+        .rules
+        .iter()
+        .enumerate()
+        .map(|(i, r)| {
+            let expr = if i == rule_idx { expression } else { &r.expression };
+            json!({
+                "id": r.id,
+                "expression": expr,
+                "description": r.description,
+                "action": r.action,
+                "action_parameters": r.action_parameters,
+                "enabled": r.enabled
+            })
+        })
+        .collect();
+
+    let update_body = json!({ "rules": rules });
+    let update_path = format!("/zones/{}/rulesets/{}", zone_id, ruleset.id);
+    let response: ApiResponse<Ruleset> = client.put(&update_path, &update_body).await?;
+
+    println!("Updated cache rule (ruleset ID: {})", ruleset.id);
+    if let Some(rule) = response.result.rules.get(rule_idx) {
+        println!("  Rule ID: {}", rule.id);
+        println!("  Description: {}", rule.description);
+        println!("  Expression: {}", rule.expression);
+    }
+
+    Ok(())
+}
+
+pub async fn delete_rule(client: &Client, zone: &str, rule_id: &str) -> Result<()> {
+    let zone_id = find_zone_id(client, zone).await?;
+
+    // Get all rulesets for the zone
+    let list_path = format!("/zones/{}/rulesets", zone_id);
+    let all_rulesets: ApiResponse<Vec<Ruleset>> = client.get(&list_path).await?;
+
+    // Find the cache settings ruleset
+    let cache_ruleset = all_rulesets
+        .result
+        .iter()
+        .find(|r| r.phase == "http_request_cache_settings");
+
+    let ruleset = match cache_ruleset {
+        Some(r) => r,
+        None => bail!("No cache rules ruleset found for zone '{}'", zone),
+    };
+
+    // Get the full ruleset with all rules
+    let get_path = format!("/zones/{}/rulesets/{}", zone_id, ruleset.id);
+    let full_ruleset: ApiResponse<Ruleset> = client.get(&get_path).await?;
+
+    // Find the rule by ID
+    let rule_to_delete = full_ruleset
+        .result
+        .rules
+        .iter()
+        .find(|r| r.id == rule_id);
+
+    let deleted_description = match rule_to_delete {
+        Some(r) => r.description.clone(),
+        None => bail!(
+            "Rule '{}' not found. Available rules:\n{}",
+            rule_id,
+            full_ruleset
+                .result
+                .rules
+                .iter()
+                .map(|r| format!("  {} - {}", r.id, r.description))
+                .collect::<Vec<_>>()
+                .join("\n")
+        ),
+    };
+
+    // Build updated rules list excluding the deleted rule
+    let rules: Vec<Value> = full_ruleset
+        .result
+        .rules
+        .iter()
+        .filter(|r| r.id != rule_id)
+        .map(|r| {
+            json!({
+                "id": r.id,
+                "expression": r.expression,
+                "description": r.description,
+                "action": r.action,
+                "action_parameters": r.action_parameters,
+                "enabled": r.enabled
+            })
+        })
+        .collect();
+
+    let update_body = json!({ "rules": rules });
+    let update_path = format!("/zones/{}/rulesets/{}", zone_id, ruleset.id);
+    let _response: ApiResponse<Ruleset> = client.put(&update_path, &update_body).await?;
+
+    println!("Deleted cache rule '{}'", rule_id);
+    if !deleted_description.is_empty() {
+        println!("  Description: {}", deleted_description);
+    }
+
+    Ok(())
+}

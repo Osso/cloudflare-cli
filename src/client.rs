@@ -14,11 +14,26 @@ pub struct Client {
 impl Client {
     pub fn new(site_config: &SiteConfig) -> Result<Self> {
         let mut headers = HeaderMap::new();
-        headers.insert(
-            AUTHORIZATION,
-            HeaderValue::from_str(&format!("Bearer {}", site_config.api_token))
-                .context("Invalid API token")?,
-        );
+
+        // Use Global API Key auth if email is set, otherwise use Bearer token
+        if let Some(email) = &site_config.email {
+            headers.insert(
+                "X-Auth-Key",
+                HeaderValue::from_str(&site_config.api_token)
+                    .context("Invalid API key")?,
+            );
+            headers.insert(
+                "X-Auth-Email",
+                HeaderValue::from_str(email)
+                    .context("Invalid email")?,
+            );
+        } else {
+            headers.insert(
+                AUTHORIZATION,
+                HeaderValue::from_str(&format!("Bearer {}", site_config.api_token))
+                    .context("Invalid API token")?,
+            );
+        }
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
 
         let http = reqwest::Client::builder()
