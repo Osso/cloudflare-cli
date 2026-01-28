@@ -87,12 +87,7 @@ pub async fn show(client: &Client, sitekey: &str, json: bool) -> Result<()> {
     Ok(())
 }
 
-pub async fn create(
-    client: &Client,
-    name: &str,
-    domains: Vec<String>,
-    mode: &str,
-) -> Result<()> {
+pub async fn create(client: &Client, name: &str, domains: Vec<String>, mode: &str) -> Result<()> {
     let path = format!("/accounts/{}/challenges/widgets", client.account_id());
 
     let request = CreateWidgetRequest {
@@ -129,7 +124,11 @@ pub async fn delete(client: &Client, sitekey: &str) -> Result<()> {
     Ok(())
 }
 
-pub async fn rotate_secret(client: &Client, sitekey: &str, invalidate_immediately: bool) -> Result<()> {
+pub async fn rotate_secret(
+    client: &Client,
+    sitekey: &str,
+    invalidate_immediately: bool,
+) -> Result<()> {
     let path = format!(
         "/accounts/{}/challenges/widgets/{}/rotate_secret",
         client.account_id(),

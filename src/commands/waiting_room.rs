@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use serde::Deserialize;
 
 use crate::client::Client;
@@ -66,7 +66,11 @@ pub async fn list(client: &Client, zone: &str) -> Result<()> {
     }
 
     for room in response.result {
-        let status = if room.suspended { "suspended" } else { "active" };
+        let status = if room.suspended {
+            "suspended"
+        } else {
+            "active"
+        };
         let status_icon = if room.suspended { "○" } else { "●" };
         println!("{} {} ({})", status_icon, room.name, status);
         println!("  Host: {}{}", room.host, room.path);
@@ -89,7 +93,11 @@ pub async fn show(client: &Client, zone: &str, id: &str) -> Result<()> {
     let response: ApiResponse<WaitingRoom> = client.get(&path).await?;
 
     let room = response.result;
-    let status = if room.suspended { "suspended" } else { "active" };
+    let status = if room.suspended {
+        "suspended"
+    } else {
+        "active"
+    };
     let status_icon = if room.suspended { "○" } else { "●" };
 
     println!("{} {} ({})", status_icon, room.name, status);
@@ -110,7 +118,10 @@ pub async fn show(client: &Client, zone: &str, id: &str) -> Result<()> {
     println!("  Queueing method: {}", room.queueing_method);
     println!();
     println!("Options:");
-    println!("  Disable session renewal: {}", room.disable_session_renewal);
+    println!(
+        "  Disable session renewal: {}",
+        room.disable_session_renewal
+    );
     println!("  JSON response enabled: {}", room.json_response_enabled);
     if !room.cookie_suffix.is_empty() {
         println!("  Cookie suffix: {}", room.cookie_suffix);

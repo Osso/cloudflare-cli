@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::client::Client;
@@ -117,7 +117,10 @@ pub async fn delete(client: &Client, zone: &str, name: &str) -> Result<()> {
     let path = format!("/zones/{}/dns_records/{}", zone_id, record.id);
     client.delete(&path).await?;
 
-    println!("Deleted {} {} → {}", record.record_type, record.name, record.content);
+    println!(
+        "Deleted {} {} → {}",
+        record.record_type, record.name, record.content
+    );
 
     Ok(())
 }

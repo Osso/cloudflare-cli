@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::client::Client;
@@ -84,7 +84,10 @@ pub async fn list(client: &Client) -> Result<()> {
         let name = display_name(&site);
         println!("{} {}", icon, name);
         println!("  ID: {}", site.site_tag);
-        println!("  Beacon injection: {}", if enabled { "enabled" } else { "disabled" });
+        println!(
+            "  Beacon injection: {}",
+            if enabled { "enabled" } else { "disabled" }
+        );
     }
 
     Ok(())
@@ -100,7 +103,10 @@ pub async fn info(client: &Client, site: &str) -> Result<()> {
     println!("{} {}", icon, name);
     println!("  ID: {}", site.site_tag);
     println!("  Token: {}", site.site_token);
-    println!("  Beacon injection: {}", if enabled { "enabled" } else { "disabled" });
+    println!(
+        "  Beacon injection: {}",
+        if enabled { "enabled" } else { "disabled" }
+    );
     if let Some(created) = &site.created {
         println!("  Created: {}", created);
     }

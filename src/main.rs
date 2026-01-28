@@ -494,14 +494,22 @@ async fn main() -> Result<()> {
                 } else {
                     ""
                 };
-                println!("Site '{}'{} saved to {}", site, marker, Config::path()?.display());
+                println!(
+                    "Site '{}'{} saved to {}",
+                    site,
+                    marker,
+                    Config::path()?.display()
+                );
             }
             ConfigCommands::List => {
                 let config = Config::load()?;
                 if config.sites.is_empty() {
                     // Check for legacy config
                     if config.api_token.is_some() && config.account_id.is_some() {
-                        println!("(legacy) account_id: {}", config.account_id.as_ref().unwrap());
+                        println!(
+                            "(legacy) account_id: {}",
+                            config.account_id.as_ref().unwrap()
+                        );
                     } else {
                         println!("No sites configured.");
                     }
@@ -520,7 +528,11 @@ async fn main() -> Result<()> {
             ConfigCommands::Default { site } => {
                 let mut config = Config::load()?;
                 if !config.sites.contains_key(&site) {
-                    anyhow::bail!("Site '{}' not found. Available: {}", site, config.list_sites());
+                    anyhow::bail!(
+                        "Site '{}' not found. Available: {}",
+                        site,
+                        config.list_sites()
+                    );
                 }
                 config.default_site = Some(site.clone());
                 config.save()?;
@@ -553,8 +565,20 @@ async fn main() -> Result<()> {
                     TunnelCommands::Show { hostname } => {
                         commands::tunnels::show(&client, &hostname).await?
                     }
-                    TunnelCommands::AddDomain { tunnel, hostname, service, access_aud } => {
-                        commands::tunnels::add_domain(&client, &tunnel, &hostname, &service, access_aud.as_deref()).await?
+                    TunnelCommands::AddDomain {
+                        tunnel,
+                        hostname,
+                        service,
+                        access_aud,
+                    } => {
+                        commands::tunnels::add_domain(
+                            &client,
+                            &tunnel,
+                            &hostname,
+                            &service,
+                            access_aud.as_deref(),
+                        )
+                        .await?
                     }
                     TunnelCommands::RemoveDomain { tunnel, hostname } => {
                         commands::tunnels::remove_domain(&client, &tunnel, &hostname).await?
@@ -605,9 +629,11 @@ async fn main() -> Result<()> {
                     TurnstileCommands::Show { sitekey, json } => {
                         commands::turnstile::show(&client, &sitekey, json).await?
                     }
-                    TurnstileCommands::Create { name, domains, mode } => {
-                        commands::turnstile::create(&client, &name, domains, &mode).await?
-                    }
+                    TurnstileCommands::Create {
+                        name,
+                        domains,
+                        mode,
+                    } => commands::turnstile::create(&client, &name, domains, &mode).await?,
                     TurnstileCommands::Delete { sitekey } => {
                         commands::turnstile::delete(&client, &sitekey).await?
                     }
@@ -615,8 +641,12 @@ async fn main() -> Result<()> {
                         sitekey,
                         invalidate_immediately,
                     } => {
-                        commands::turnstile::rotate_secret(&client, &sitekey, invalidate_immediately)
-                            .await?
+                        commands::turnstile::rotate_secret(
+                            &client,
+                            &sitekey,
+                            invalidate_immediately,
+                        )
+                        .await?
                     }
                 },
                 Commands::Cache { action } => match action {
@@ -630,12 +660,16 @@ async fn main() -> Result<()> {
                     CacheCommands::Rules { zone } => {
                         commands::cache::cache_rules(&client, &zone).await?
                     }
-                    CacheCommands::CreateRule { zone, name, expression } => {
-                        commands::cache::create_rule(&client, &zone, &name, &expression).await?
-                    }
-                    CacheCommands::UpdateRule { zone, name, expression } => {
-                        commands::cache::update_rule(&client, &zone, &name, &expression).await?
-                    }
+                    CacheCommands::CreateRule {
+                        zone,
+                        name,
+                        expression,
+                    } => commands::cache::create_rule(&client, &zone, &name, &expression).await?,
+                    CacheCommands::UpdateRule {
+                        zone,
+                        name,
+                        expression,
+                    } => commands::cache::update_rule(&client, &zone, &name, &expression).await?,
                     CacheCommands::DeleteRule { zone, rule_id } => {
                         commands::cache::delete_rule(&client, &zone, &rule_id).await?
                     }
@@ -666,14 +700,14 @@ async fn main() -> Result<()> {
                         period,
                         action,
                     } => {
-                        commands::firewall::ratelimit(&client, &zone, &path, requests, period, &action)
-                            .await?
+                        commands::firewall::ratelimit(
+                            &client, &zone, &path, requests, period, &action,
+                        )
+                        .await?
                     }
                 },
                 Commands::Dns { action } => match action {
-                    DnsCommands::List { zone } => {
-                        commands::dns::list(&client, &zone).await?
-                    }
+                    DnsCommands::List { zone } => commands::dns::list(&client, &zone).await?,
                     DnsCommands::Create {
                         zone,
                         record_type,
@@ -681,8 +715,15 @@ async fn main() -> Result<()> {
                         content,
                         proxied,
                     } => {
-                        commands::dns::create(&client, &zone, &record_type, &name, &content, proxied)
-                            .await?
+                        commands::dns::create(
+                            &client,
+                            &zone,
+                            &record_type,
+                            &name,
+                            &content,
+                            proxied,
+                        )
+                        .await?
                     }
                     DnsCommands::Delete { zone, name } => {
                         commands::dns::delete(&client, &zone, &name).await?
@@ -690,12 +731,8 @@ async fn main() -> Result<()> {
                 },
                 Commands::Zones { action } => match action {
                     ZoneCommands::List => commands::zones::list(&client).await?,
-                    ZoneCommands::Add { domain } => {
-                        commands::zones::add(&client, &domain).await?
-                    }
-                    ZoneCommands::Info { zone } => {
-                        commands::zones::info(&client, &zone).await?
-                    }
+                    ZoneCommands::Add { domain } => commands::zones::add(&client, &domain).await?,
+                    ZoneCommands::Info { zone } => commands::zones::info(&client, &zone).await?,
                     ZoneCommands::Delete { zone } => {
                         commands::zones::delete(&client, &zone).await?
                     }

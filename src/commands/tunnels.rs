@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::client::Client;
@@ -46,7 +46,11 @@ pub struct IngressRule {
     pub service: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
-    #[serde(default, rename = "originRequest", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        rename = "originRequest",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub origin_request: Option<OriginRequest>,
 }
 
@@ -54,9 +58,17 @@ pub struct IngressRule {
 pub struct OriginRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub access: Option<AccessConfig>,
-    #[serde(default, rename = "noTLSVerify", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        rename = "noTLSVerify",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub no_tls_verify: Option<bool>,
-    #[serde(default, rename = "httpHostHeader", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        rename = "httpHostHeader",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub http_host_header: Option<String>,
 }
 
@@ -171,7 +183,9 @@ pub async fn show(client: &Client, hostname: &str) -> Result<()> {
         );
         let config_response: ApiResponse<TunnelConfig> = client.get(&config_path).await?;
 
-        let Some(config) = config_response.result.config else { continue };
+        let Some(config) = config_response.result.config else {
+            continue;
+        };
         for rule in config.ingress {
             let rule_hostname = rule.hostname.as_deref().unwrap_or("");
             if rule_hostname == hostname || rule_hostname.contains(hostname) {
@@ -254,8 +268,15 @@ pub async fn add_domain(
     let inner = config.config.as_mut().unwrap(); // Safe: get_config ensures it's Some
 
     // Check for duplicate hostname
-    if inner.ingress.iter().any(|r| r.hostname.as_deref() == Some(hostname)) {
-        bail!("Hostname '{}' already exists in tunnel configuration", hostname);
+    if inner
+        .ingress
+        .iter()
+        .any(|r| r.hostname.as_deref() == Some(hostname))
+    {
+        bail!(
+            "Hostname '{}' already exists in tunnel configuration",
+            hostname
+        );
     }
 
     // Create access config if AUD provided
@@ -278,7 +299,9 @@ pub async fn add_domain(
     };
 
     // Insert before the catch-all (last entry without hostname)
-    let insert_pos = inner.ingress.iter()
+    let insert_pos = inner
+        .ingress
+        .iter()
         .position(|r| r.hostname.is_none())
         .unwrap_or(inner.ingress.len());
 
@@ -301,7 +324,9 @@ pub async fn remove_domain(client: &Client, tunnel_id: &str, hostname: &str) -> 
 
     // Find the rule to remove
     let initial_len = inner.ingress.len();
-    inner.ingress.retain(|r| r.hostname.as_deref() != Some(hostname));
+    inner
+        .ingress
+        .retain(|r| r.hostname.as_deref() != Some(hostname));
 
     if inner.ingress.len() == initial_len {
         bail!("Hostname '{}' not found in tunnel configuration", hostname);

@@ -55,7 +55,10 @@ pub async fn show(client: &Client, app_id: &str, json: bool) -> Result<()> {
     if json {
         let raw = client.get_raw(&path).await?;
         let parsed: serde_json::Value = serde_json::from_str(&raw)?;
-        println!("{}", serde_json::to_string_pretty(&parsed.get("result").unwrap_or(&parsed))?);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&parsed.get("result").unwrap_or(&parsed))?
+        );
         return Ok(());
     }
 
@@ -149,11 +152,7 @@ pub async fn create(
 }
 
 pub async fn delete(client: &Client, app_id: &str) -> Result<()> {
-    let path = format!(
-        "/accounts/{}/access/apps/{}",
-        client.account_id(),
-        app_id
-    );
+    let path = format!("/accounts/{}/access/apps/{}", client.account_id(), app_id);
 
     client.delete(&path).await?;
     println!("Deleted application: {}", app_id);
@@ -186,7 +185,11 @@ pub async fn remove_hostname(client: &Client, app_id: &str, hostname: &str) -> R
         .collect();
 
     if new_domains.len() == initial_len {
-        anyhow::bail!("Hostname '{}' not found in application '{}'", hostname, app.name);
+        anyhow::bail!(
+            "Hostname '{}' not found in application '{}'",
+            hostname,
+            app.name
+        );
     }
 
     if new_domains.is_empty() {

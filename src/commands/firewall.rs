@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -70,7 +70,10 @@ async fn find_zone_id(client: &Client, zone: &str) -> Result<String> {
 
 pub async fn list(client: &Client, zone: &str) -> Result<()> {
     let zone_id = find_zone_id(client, zone).await?;
-    let path = format!("/zones/{}/firewall/access_rules/rules?per_page=100", zone_id);
+    let path = format!(
+        "/zones/{}/firewall/access_rules/rules?per_page=100",
+        zone_id
+    );
     let response: PaginatedResponse<Vec<AccessRule>> = client.get(&path).await?;
 
     if response.result.is_empty() {
@@ -364,7 +367,9 @@ pub async fn events(
         bail!("GraphQL query failed");
     }
 
-    let data = response.data.ok_or_else(|| anyhow::anyhow!("No data returned"))?;
+    let data = response
+        .data
+        .ok_or_else(|| anyhow::anyhow!("No data returned"))?;
 
     if data.viewer.zones.is_empty() {
         println!("No zone data found");
@@ -375,7 +380,10 @@ pub async fn events(
 
     if events.is_empty() {
         if let Some(ip_addr) = ip {
-            println!("No security events for IP {} in the last {} hours", ip_addr, hours);
+            println!(
+                "No security events for IP {} in the last {} hours",
+                ip_addr, hours
+            );
         } else {
             println!("No security events in the last {} hours", hours);
         }
@@ -408,7 +416,10 @@ pub async fn events(
             }
         );
         println!("  Time: {}", event.datetime);
-        println!("  Country: {} | ASN: {}", event.client_country, event.client_asn);
+        println!(
+            "  Country: {} | ASN: {}",
+            event.client_country, event.client_asn
+        );
         if !event.rule_id.is_empty() {
             println!("  Rule: {}", event.rule_id);
         }
@@ -454,7 +465,10 @@ pub async fn ratelimit(
         Err(e) => {
             let err_str = e.to_string();
             // 404 or "could not find entrypoint ruleset" means no ruleset exists yet
-            if err_str.contains("404") || err_str.contains("10003") || err_str.contains("could not find") {
+            if err_str.contains("404")
+                || err_str.contains("10003")
+                || err_str.contains("could not find")
+            {
                 Vec::new()
             } else {
                 return Err(e);

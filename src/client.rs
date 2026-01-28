@@ -19,13 +19,11 @@ impl Client {
         if let Some(email) = &site_config.email {
             headers.insert(
                 "X-Auth-Key",
-                HeaderValue::from_str(&site_config.api_token)
-                    .context("Invalid API key")?,
+                HeaderValue::from_str(&site_config.api_token).context("Invalid API key")?,
             );
             headers.insert(
                 "X-Auth-Email",
-                HeaderValue::from_str(email)
-                    .context("Invalid email")?,
+                HeaderValue::from_str(email).context("Invalid email")?,
             );
         } else {
             headers.insert(

@@ -1,6 +1,6 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::client::Client;
 use crate::commands::tunnels::ApiResponse;
@@ -61,13 +61,21 @@ async fn find_zone_id(client: &Client, zone: &str) -> Result<String> {
     let response: ApiResponse<Vec<Zone>> = client.get(&path).await?;
 
     if response.result.is_empty() {
-        bail!("Zone '{}' not found. Use 'cloudflare cache zones' to list available zones.", zone);
+        bail!(
+            "Zone '{}' not found. Use 'cloudflare cache zones' to list available zones.",
+            zone
+        );
     }
 
     Ok(response.result[0].id.clone())
 }
 
-pub async fn purge(client: &Client, zone: &str, urls: Option<Vec<String>>, all: bool) -> Result<()> {
+pub async fn purge(
+    client: &Client,
+    zone: &str,
+    urls: Option<Vec<String>>,
+    all: bool,
+) -> Result<()> {
     let zone_id = find_zone_id(client, zone).await?;
 
     let request = if all {
@@ -91,7 +99,10 @@ pub async fn purge(client: &Client, zone: &str, urls: Option<Vec<String>>, all: 
     let response: ApiResponse<PurgeResult> = client.post(&path, &request).await?;
 
     if all {
-        println!("Purged all cache for zone (request ID: {})", response.result.id);
+        println!(
+            "Purged all cache for zone (request ID: {})",
+            response.result.id
+        );
     } else {
         println!("Purged cache (request ID: {})", response.result.id);
     }
@@ -138,7 +149,11 @@ pub async fn page_rules(client: &Client, zone: &str) -> Result<()> {
     }
 
     for rule in response.result {
-        let status_icon = if rule.status == "active" { "●" } else { "○" };
+        let status_icon = if rule.status == "active" {
+            "●"
+        } else {
+            "○"
+        };
         let url = rule
             .targets
             .first()
@@ -193,7 +208,10 @@ pub async fn cache_rules(client: &Client, zone: &str) -> Result<()> {
     let zone_id = find_zone_id(client, zone).await?;
 
     // First get the list of rulesets to find the cache settings ruleset
-    let path = format!("/zones/{}/rulesets?phase=http_request_cache_settings", zone_id);
+    let path = format!(
+        "/zones/{}/rulesets?phase=http_request_cache_settings",
+        zone_id
+    );
     let response: ApiResponse<Vec<Ruleset>> = client.get(&path).await?;
 
     if response.result.is_empty() {
@@ -378,7 +396,11 @@ pub async fn update_rule(client: &Client, zone: &str, name: &str, expression: &s
         .iter()
         .enumerate()
         .map(|(i, r)| {
-            let expr = if i == rule_idx { expression } else { &r.expression };
+            let expr = if i == rule_idx {
+                expression
+            } else {
+                &r.expression
+            };
             json!({
                 "id": r.id,
                 "expression": expr,
@@ -427,11 +449,7 @@ pub async fn delete_rule(client: &Client, zone: &str, rule_id: &str) -> Result<(
     let full_ruleset: ApiResponse<Ruleset> = client.get(&get_path).await?;
 
     // Find the rule by ID
-    let rule_to_delete = full_ruleset
-        .result
-        .rules
-        .iter()
-        .find(|r| r.id == rule_id);
+    let rule_to_delete = full_ruleset.result.rules.iter().find(|r| r.id == rule_id);
 
     let deleted_description = match rule_to_delete {
         Some(r) => r.description.clone(),

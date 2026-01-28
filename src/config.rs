@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -68,7 +68,11 @@ impl Config {
             return Ok(cfg.clone());
         }
 
-        bail!("Site '{}' not found in config. Available sites: {}", s, self.list_sites());
+        bail!(
+            "Site '{}' not found in config. Available sites: {}",
+            s,
+            self.list_sites()
+        );
     }
 
     pub fn list_sites(&self) -> String {
