@@ -430,6 +430,82 @@ pub async fn events(
     Ok(())
 }
 
+// Request type for creating IP access rules
+#[derive(Debug, Serialize)]
+struct AccessRuleCreateRequest {
+    mode: String,
+    configuration: AccessRuleConfigurationCreate,
+    notes: String,
+}
+
+#[derive(Debug, Serialize)]
+struct AccessRuleConfigurationCreate {
+    target: String,
+    value: String,
+}
+
+pub async fn block(client: &Client, zone: &str, ip: &str, note: Option<&str>) -> Result<()> {
+    let zone_id = find_zone_id(client, zone).await?;
+
+    // Determine if this is an IP, IP range (CIDR), or single address
+    // ip_range works for both IPv4 and IPv6 CIDR notation
+    let (target, value) = if ip.contains('/') {
+        ("ip_range", ip.to_string())
+    } else if ip.contains(':') {
+        ("ip6", ip.to_string())
+    } else {
+        ("ip", ip.to_string())
+    };
+
+    let request = AccessRuleCreateRequest {
+        mode: "block".to_string(),
+        configuration: AccessRuleConfigurationCreate {
+            target: target.to_string(),
+            value,
+        },
+        notes: note.unwrap_or("Blocked via CLI").to_string(),
+    };
+
+    let path = format!("/zones/{}/firewall/access_rules/rules", zone_id);
+    let response: ApiResponse<AccessRule> = client.post(&path, &request).await?;
+
+    println!("⛔ Blocked {} {}", target, ip);
+    println!("  Rule ID: {}", response.result.id);
+    if let Some(n) = note {
+        println!("  Note: {}", n);
+    }
+
+    Ok(())
+}
+
+pub async fn unblock(client: &Client, zone: &str, ip: &str) -> Result<()> {
+    let zone_id = find_zone_id(client, zone).await?;
+
+    // First find the rule ID for this IP
+    let search_path = format!(
+        "/zones/{}/firewall/access_rules/rules?configuration.value={}&per_page=100",
+        zone_id, ip
+    );
+    let response: PaginatedResponse<Vec<AccessRule>> = client.get(&search_path).await?;
+
+    if response.result.is_empty() {
+        println!("No access rule found for IP {}", ip);
+        return Ok(());
+    }
+
+    for rule in response.result {
+        let delete_path = format!(
+            "/zones/{}/firewall/access_rules/rules/{}",
+            zone_id, rule.id
+        );
+        client.delete(&delete_path).await?;
+        println!("✓ Removed {} rule for {}", rule.mode, ip);
+        println!("  Rule ID: {}", rule.id);
+    }
+
+    Ok(())
+}
+
 pub async fn ratelimit(
     client: &Client,
     zone: &str,

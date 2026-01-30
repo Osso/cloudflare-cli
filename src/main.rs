@@ -339,6 +339,23 @@ enum FirewallCommands {
         #[arg(long, default_value = "challenge")]
         action: String,
     },
+    /// Block an IP address or CIDR range
+    Block {
+        /// Zone name (domain) or zone ID
+        zone: String,
+        /// IP address or CIDR range to block (e.g., 1.2.3.4 or 1.2.3.0/24)
+        ip: String,
+        /// Optional note for the block rule
+        #[arg(long, short)]
+        note: Option<String>,
+    },
+    /// Unblock an IP address (remove access rule)
+    Unblock {
+        /// Zone name (domain) or zone ID
+        zone: String,
+        /// IP address or CIDR range to unblock
+        ip: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -704,6 +721,12 @@ async fn main() -> Result<()> {
                             &client, &zone, &path, requests, period, &action,
                         )
                         .await?
+                    }
+                    FirewallCommands::Block { zone, ip, note } => {
+                        commands::firewall::block(&client, &zone, &ip, note.as_deref()).await?
+                    }
+                    FirewallCommands::Unblock { zone, ip } => {
+                        commands::firewall::unblock(&client, &zone, &ip).await?
                     }
                 },
                 Commands::Dns { action } => match action {
