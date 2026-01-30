@@ -19,11 +19,8 @@ jobs:
           - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
             name: linux-arm64
-          - target: x86_64-apple-darwin
-            os: macos-15-large
-            name: darwin-amd64
           - target: aarch64-apple-darwin
-            os: macos-14
+            os: macos-latest
             name: darwin-arm64
 
     runs-on: ${{ matrix.os }}
@@ -80,7 +77,6 @@ jobs:
           mkdir -p release
           mv artifacts/cloudflare-linux-amd64/cloudflare-linux-amd64 release/
           mv artifacts/cloudflare-linux-arm64/cloudflare-linux-arm64 release/
-          mv artifacts/cloudflare-darwin-amd64/cloudflare-darwin-amd64 release/
           mv artifacts/cloudflare-darwin-arm64/cloudflare-darwin-arm64 release/
           chmod +x release/*
 
