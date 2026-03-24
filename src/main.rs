@@ -1,6 +1,7 @@
 mod client;
 mod commands;
 mod config;
+mod dispatch;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -76,6 +77,11 @@ enum Commands {
     Rum {
         #[command(subcommand)]
         action: RumCommands,
+    },
+    /// HTTP traffic analytics
+    Analytics {
+        #[command(subcommand)]
+        action: AnalyticsCommands,
     },
     /// Configure API credentials
     Config {
@@ -155,6 +161,13 @@ enum AppCommands {
     Delete {
         /// Application ID
         app_id: String,
+    },
+    /// Add a hostname to an Access application
+    AddHostname {
+        /// Application ID
+        app_id: String,
+        /// Hostname to add
+        hostname: String,
     },
     /// Remove a hostname from an Access application
     RemoveHostname {
@@ -268,6 +281,9 @@ enum CacheCommands {
         /// Filter expression (e.g., '(http.host eq "example.com")')
         #[arg(long)]
         expression: String,
+        /// Bypass cache instead of enabling it
+        #[arg(long)]
+        bypass: bool,
     },
     /// Update an existing cache rule's expression
     UpdateRule {
@@ -459,6 +475,18 @@ enum RumCommands {
 }
 
 #[derive(Subcommand)]
+enum AnalyticsCommands {
+    /// Show HTTP status code breakdown by day
+    StatusCodes {
+        /// Zone name (domain) or zone ID
+        zone: String,
+        /// Number of days to look back (default: 1, max: 30)
+        #[arg(long, short, default_value = "1")]
+        days: u32,
+    },
+}
+
+#[derive(Subcommand)]
 enum ConfigCommands {
     /// Set API credentials for a site
     Set {
@@ -491,302 +519,104 @@ enum ConfigCommands {
     Path,
 }
 
+fn config_set(site: String, token: String, account_id: String, default: bool) -> Result<()> {
+    let mut config = Config::load().unwrap_or_default();
+    config.set_site(&site, &token, &account_id, default);
+    config.save()?;
+    let marker = if config.default_site.as_deref() == Some(&site) {
+        " (default)"
+    } else {
+        ""
+    };
+    println!(
+        "Site '{}'{} saved to {}",
+        site,
+        marker,
+        Config::path()?.display()
+    );
+    Ok(())
+}
+
+fn config_list() -> Result<()> {
+    let config = Config::load()?;
+    if config.sites.is_empty() {
+        if config.api_token.is_some() && config.account_id.is_some() {
+            println!(
+                "(legacy) account_id: {}",
+                config.account_id.as_ref().unwrap()
+            );
+        } else {
+            println!("No sites configured.");
+        }
+    } else {
+        for (name, site_cfg) in &config.sites {
+            let marker = if config.default_site.as_deref() == Some(name) {
+                " *"
+            } else {
+                ""
+            };
+            println!("{}{}", name, marker);
+            println!("  account_id: {}", site_cfg.account_id);
+        }
+    }
+    Ok(())
+}
+
+fn config_set_default(site: String) -> Result<()> {
+    let mut config = Config::load()?;
+    if !config.sites.contains_key(&site) {
+        anyhow::bail!(
+            "Site '{}' not found. Available: {}",
+            site,
+            config.list_sites()
+        );
+    }
+    config.default_site = Some(site.clone());
+    config.save()?;
+    println!("Default site set to '{}'", site);
+    Ok(())
+}
+
+fn config_remove(site: String) -> Result<()> {
+    let mut config = Config::load()?;
+    if config.remove_site(&site) {
+        config.save()?;
+        println!("Site '{}' removed", site);
+    } else {
+        println!("Site '{}' not found", site);
+    }
+    Ok(())
+}
+
+fn handle_config(action: ConfigCommands) -> Result<()> {
+    match action {
+        ConfigCommands::Set {
+            site,
+            token,
+            account_id,
+            default,
+        } => config_set(site, token, account_id, default),
+        ConfigCommands::List => config_list(),
+        ConfigCommands::Default { site } => config_set_default(site),
+        ConfigCommands::Remove { site } => config_remove(site),
+        ConfigCommands::Path => {
+            println!("{}", Config::path()?.display());
+            Ok(())
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Config { action } => match action {
-            ConfigCommands::Set {
-                site,
-                token,
-                account_id,
-                default,
-            } => {
-                let mut config = Config::load().unwrap_or_default();
-                config.set_site(&site, &token, &account_id, default);
-                config.save()?;
-                let marker = if config.default_site.as_deref() == Some(&site) {
-                    " (default)"
-                } else {
-                    ""
-                };
-                println!(
-                    "Site '{}'{} saved to {}",
-                    site,
-                    marker,
-                    Config::path()?.display()
-                );
-            }
-            ConfigCommands::List => {
-                let config = Config::load()?;
-                if config.sites.is_empty() {
-                    // Check for legacy config
-                    if config.api_token.is_some() && config.account_id.is_some() {
-                        println!(
-                            "(legacy) account_id: {}",
-                            config.account_id.as_ref().unwrap()
-                        );
-                    } else {
-                        println!("No sites configured.");
-                    }
-                } else {
-                    for (name, site_cfg) in &config.sites {
-                        let marker = if config.default_site.as_deref() == Some(name) {
-                            " *"
-                        } else {
-                            ""
-                        };
-                        println!("{}{}", name, marker);
-                        println!("  account_id: {}", site_cfg.account_id);
-                    }
-                }
-            }
-            ConfigCommands::Default { site } => {
-                let mut config = Config::load()?;
-                if !config.sites.contains_key(&site) {
-                    anyhow::bail!(
-                        "Site '{}' not found. Available: {}",
-                        site,
-                        config.list_sites()
-                    );
-                }
-                config.default_site = Some(site.clone());
-                config.save()?;
-                println!("Default site set to '{}'", site);
-            }
-            ConfigCommands::Remove { site } => {
-                let mut config = Config::load()?;
-                if config.remove_site(&site) {
-                    config.save()?;
-                    println!("Site '{}' removed", site);
-                } else {
-                    println!("Site '{}' not found", site);
-                }
-            }
-            ConfigCommands::Path => {
-                println!("{}", Config::path()?.display());
-            }
-        },
-        _ => {
+        Commands::Config { action } => handle_config(action),
+        command => {
             let config = Config::load()?;
             let site_config = config.get_site(cli.site.as_deref())?;
             let client = Client::new(&site_config)?;
-
-            match cli.command {
-                Commands::Tunnels { action } => match action {
-                    TunnelCommands::List => commands::tunnels::list(&client).await?,
-                    TunnelCommands::Domains { tunnel } => {
-                        commands::tunnels::domains(&client, &tunnel).await?
-                    }
-                    TunnelCommands::Show { hostname } => {
-                        commands::tunnels::show(&client, &hostname).await?
-                    }
-                    TunnelCommands::AddDomain {
-                        tunnel,
-                        hostname,
-                        service,
-                        access_aud,
-                    } => {
-                        commands::tunnels::add_domain(
-                            &client,
-                            &tunnel,
-                            &hostname,
-                            &service,
-                            access_aud.as_deref(),
-                        )
-                        .await?
-                    }
-                    TunnelCommands::RemoveDomain { tunnel, hostname } => {
-                        commands::tunnels::remove_domain(&client, &tunnel, &hostname).await?
-                    }
-                    TunnelCommands::Token { tunnel } => {
-                        commands::tunnels::token(&client, &tunnel).await?
-                    }
-                    TunnelCommands::Create { name } => {
-                        commands::tunnels::create(&client, &name).await?
-                    }
-                },
-                Commands::Apps { action } => match action {
-                    AppCommands::List => commands::applications::list(&client).await?,
-                    AppCommands::Show { app_id, json } => {
-                        commands::applications::show(&client, &app_id, json).await?
-                    }
-                    AppCommands::Create {
-                        name,
-                        domain,
-                        service_token,
-                    } => {
-                        commands::applications::create(&client, &name, &domain, &service_token)
-                            .await?
-                    }
-                    AppCommands::Delete { app_id } => {
-                        commands::applications::delete(&client, &app_id).await?
-                    }
-                    AppCommands::RemoveHostname { app_id, hostname } => {
-                        commands::applications::remove_hostname(&client, &app_id, &hostname).await?
-                    }
-                },
-                Commands::Tokens { action } => match action {
-                    TokenCommands::List => commands::service_tokens::list(&client).await?,
-                    TokenCommands::Create { name, duration } => {
-                        commands::service_tokens::create(&client, &name, &duration).await?
-                    }
-                    TokenCommands::Delete { token_id } => {
-                        commands::service_tokens::delete(&client, &token_id).await?
-                    }
-                },
-                Commands::Gateway { action } => match action {
-                    GatewayCommands::Dns => commands::gateway::dns_rules(&client).await?,
-                    GatewayCommands::Network => commands::gateway::network_rules(&client).await?,
-                    GatewayCommands::Http => commands::gateway::http_rules(&client).await?,
-                },
-                Commands::Turnstile { action } => match action {
-                    TurnstileCommands::List => commands::turnstile::list(&client).await?,
-                    TurnstileCommands::Show { sitekey, json } => {
-                        commands::turnstile::show(&client, &sitekey, json).await?
-                    }
-                    TurnstileCommands::Create {
-                        name,
-                        domains,
-                        mode,
-                    } => commands::turnstile::create(&client, &name, domains, &mode).await?,
-                    TurnstileCommands::Delete { sitekey } => {
-                        commands::turnstile::delete(&client, &sitekey).await?
-                    }
-                    TurnstileCommands::RotateSecret {
-                        sitekey,
-                        invalidate_immediately,
-                    } => {
-                        commands::turnstile::rotate_secret(
-                            &client,
-                            &sitekey,
-                            invalidate_immediately,
-                        )
-                        .await?
-                    }
-                },
-                Commands::Cache { action } => match action {
-                    CacheCommands::Zones => commands::cache::list_zones(&client).await?,
-                    CacheCommands::Purge { zone, url, all } => {
-                        commands::cache::purge(&client, &zone, url, all).await?
-                    }
-                    CacheCommands::PageRules { zone } => {
-                        commands::cache::page_rules(&client, &zone).await?
-                    }
-                    CacheCommands::Rules { zone } => {
-                        commands::cache::cache_rules(&client, &zone).await?
-                    }
-                    CacheCommands::CreateRule {
-                        zone,
-                        name,
-                        expression,
-                    } => commands::cache::create_rule(&client, &zone, &name, &expression).await?,
-                    CacheCommands::UpdateRule {
-                        zone,
-                        name,
-                        expression,
-                    } => commands::cache::update_rule(&client, &zone, &name, &expression).await?,
-                    CacheCommands::DeleteRule { zone, rule_id } => {
-                        commands::cache::delete_rule(&client, &zone, &rule_id).await?
-                    }
-                },
-                Commands::Firewall { action } => match action {
-                    FirewallCommands::List { zone } => {
-                        commands::firewall::list(&client, &zone).await?
-                    }
-                    FirewallCommands::Check { zone, ip } => {
-                        commands::firewall::check(&client, &zone, &ip).await?
-                    }
-                    FirewallCommands::Rules { zone } => {
-                        commands::firewall::rules(&client, &zone).await?
-                    }
-                    FirewallCommands::Events {
-                        zone,
-                        ip,
-                        hours,
-                        limit,
-                    } => {
-                        commands::firewall::events(&client, &zone, ip.as_deref(), hours, limit)
-                            .await?
-                    }
-                    FirewallCommands::Ratelimit {
-                        zone,
-                        path,
-                        requests,
-                        period,
-                        action,
-                    } => {
-                        commands::firewall::ratelimit(
-                            &client, &zone, &path, requests, period, &action,
-                        )
-                        .await?
-                    }
-                    FirewallCommands::Block { zone, ip, note } => {
-                        commands::firewall::block(&client, &zone, &ip, note.as_deref()).await?
-                    }
-                    FirewallCommands::Unblock { zone, ip } => {
-                        commands::firewall::unblock(&client, &zone, &ip).await?
-                    }
-                },
-                Commands::Dns { action } => match action {
-                    DnsCommands::List { zone } => commands::dns::list(&client, &zone).await?,
-                    DnsCommands::Create {
-                        zone,
-                        record_type,
-                        name,
-                        content,
-                        proxied,
-                    } => {
-                        commands::dns::create(
-                            &client,
-                            &zone,
-                            &record_type,
-                            &name,
-                            &content,
-                            proxied,
-                        )
-                        .await?
-                    }
-                    DnsCommands::Delete { zone, name } => {
-                        commands::dns::delete(&client, &zone, &name).await?
-                    }
-                },
-                Commands::Zones { action } => match action {
-                    ZoneCommands::List => commands::zones::list(&client).await?,
-                    ZoneCommands::Add { domain } => commands::zones::add(&client, &domain).await?,
-                    ZoneCommands::Info { zone } => commands::zones::info(&client, &zone).await?,
-                    ZoneCommands::Delete { zone } => {
-                        commands::zones::delete(&client, &zone).await?
-                    }
-                },
-                Commands::WaitingRoom { action } => match action {
-                    WaitingRoomCommands::List { zone } => {
-                        commands::waiting_room::list(&client, &zone).await?
-                    }
-                    WaitingRoomCommands::Show { zone, id } => {
-                        commands::waiting_room::show(&client, &zone, &id).await?
-                    }
-                },
-                Commands::Rum { action } => match action {
-                    RumCommands::List => commands::rum::list(&client).await?,
-                    RumCommands::Info { rum_site } => {
-                        commands::rum::info(&client, &rum_site).await?
-                    }
-                    RumCommands::Disable { rum_site } => {
-                        commands::rum::disable(&client, &rum_site).await?
-                    }
-                    RumCommands::Enable { rum_site } => {
-                        commands::rum::enable(&client, &rum_site).await?
-                    }
-                    RumCommands::Delete { rum_site } => {
-                        commands::rum::delete(&client, &rum_site).await?
-                    }
-                },
-                Commands::Config { .. } => unreachable!(),
-            }
+            dispatch::dispatch_command(command, &client).await
         }
     }
-
-    Ok(())
 }
