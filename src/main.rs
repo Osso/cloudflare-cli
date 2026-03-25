@@ -394,9 +394,12 @@ enum DnsCommands {
         /// Record content (IP address, hostname, etc.)
         #[arg(long, short)]
         content: String,
-        /// Proxy through Cloudflare (orange cloud)
-        #[arg(long, short, default_value = "true")]
+        /// Proxy through Cloudflare (orange cloud) [default]
+        #[arg(long, short, conflicts_with = "no_proxy")]
         proxied: bool,
+        /// Do not proxy through Cloudflare (grey cloud)
+        #[arg(long, conflicts_with = "proxied")]
+        no_proxy: bool,
     },
     /// Delete a DNS record
     Delete {

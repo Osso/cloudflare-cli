@@ -179,7 +179,11 @@ async fn dispatch_dns(action: DnsCommands, client: &Client) -> Result<()> {
             name,
             content,
             proxied,
-        } => commands::dns::create(client, &zone, &record_type, &name, &content, proxied).await,
+            no_proxy,
+        } => {
+            let use_proxied = if no_proxy { false } else if proxied { true } else { true };
+            commands::dns::create(client, &zone, &record_type, &name, &content, use_proxied).await
+        }
         DnsCommands::Delete { zone, name } => commands::dns::delete(client, &zone, &name).await,
     }
 }
