@@ -2,7 +2,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::client::Client;
-use crate::commands::tunnels::ApiResponse;
+use super::ApiResponse;
 
 #[derive(Debug, Deserialize)]
 pub struct Application {
@@ -166,6 +166,38 @@ struct UpdateAppRequest {
     #[serde(rename = "type")]
     app_type: String,
     self_hosted_domains: Vec<String>,
+}
+
+pub async fn add_hostname(client: &Client, app_id: &str, hostname: &str) -> Result<()> {
+    let path = format!("/accounts/{}/access/apps/{}", client.account_id(), app_id);
+
+    // Get current app
+    let response: ApiResponse<Application> = client.get(&path).await?;
+    let app = response.result;
+
+    // Check if hostname already exists
+    if app.self_hosted_domains.contains(&hostname.to_string()) {
+        anyhow::bail!(
+            "Hostname '{}' already exists in application '{}'",
+            hostname,
+            app.name
+        );
+    }
+
+    // Append hostname
+    let mut new_domains = app.self_hosted_domains.clone();
+    new_domains.push(hostname.to_string());
+
+    // Update app
+    let request = UpdateAppRequest {
+        name: app.name.clone(),
+        app_type: app.app_type.clone(),
+        self_hosted_domains: new_domains,
+    };
+    let _response: ApiResponse<Application> = client.put(&path, &request).await?;
+
+    println!("Added {} to {}", hostname, app.name);
+    Ok(())
 }
 
 pub async fn remove_hostname(client: &Client, app_id: &str, hostname: &str) -> Result<()> {

@@ -3,8 +3,7 @@ use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::client::Client;
-use crate::commands::cache::Zone;
-use crate::commands::tunnels::ApiResponse;
+use super::{ApiResponse, find_zone_id};
 
 #[derive(Debug, Deserialize)]
 pub struct AccessRule {
@@ -46,26 +45,6 @@ struct PaginatedResponse<T> {
     #[serde(default)]
     result_info: Option<ResultInfo>,
     success: bool,
-}
-
-async fn find_zone_id(client: &Client, zone: &str) -> Result<String> {
-    // If it looks like a zone ID (32 hex chars), use it directly
-    if zone.len() == 32 && zone.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Ok(zone.to_string());
-    }
-
-    // Otherwise, look up by domain name
-    let path = format!("/zones?name={}&account.id={}", zone, client.account_id());
-    let response: ApiResponse<Vec<Zone>> = client.get(&path).await?;
-
-    if response.result.is_empty() {
-        bail!(
-            "Zone '{}' not found. Use 'cloudflare cache zones' to list available zones.",
-            zone
-        );
-    }
-
-    Ok(response.result[0].id.clone())
 }
 
 pub async fn list(client: &Client, zone: &str) -> Result<()> {

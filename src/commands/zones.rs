@@ -2,7 +2,7 @@ use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::client::Client;
-use crate::commands::tunnels::ApiResponse;
+use super::ApiResponse;
 
 #[derive(Debug, Deserialize)]
 pub struct Zone {

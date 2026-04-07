@@ -4,8 +4,8 @@ use crate::client::Client;
 use crate::commands;
 use crate::{
     AnalyticsCommands, AppCommands, CacheCommands, Commands, DnsCommands, FirewallCommands,
-    GatewayCommands, RumCommands, TokenCommands, TunnelCommands, TurnstileCommands,
-    WaitingRoomCommands, ZoneCommands,
+    GatewayCommands, RateLimitingCommands, RumCommands, TokenCommands, TunnelCommands,
+    TurnstileCommands, WaitingRoomCommands, ZoneCommands,
 };
 
 pub async fn dispatch_command(command: Commands, client: &Client) -> Result<()> {
@@ -21,6 +21,7 @@ pub async fn dispatch_command(command: Commands, client: &Client) -> Result<()> 
         Commands::Zones { action } => dispatch_zones(action, client).await,
         Commands::WaitingRoom { action } => dispatch_waiting_room(action, client).await,
         Commands::Rum { action } => dispatch_rum(action, client).await,
+        Commands::RateLimiting { action } => dispatch_rate_limiting(action, client).await,
         Commands::Analytics { action } => dispatch_analytics(action, client).await,
         Commands::Config { .. } => unreachable!(),
     }
@@ -223,6 +224,17 @@ async fn dispatch_analytics(action: AnalyticsCommands, client: &Client) -> Resul
                 bail!("--days must be 30 or less");
             }
             commands::analytics::status_codes(client, &zone, days).await
+        }
+    }
+}
+
+async fn dispatch_rate_limiting(action: RateLimitingCommands, client: &Client) -> Result<()> {
+    match action {
+        RateLimitingCommands::List { zone } => {
+            commands::rate_limiting::list(client, &zone).await
+        }
+        RateLimitingCommands::Get { zone, rule_id } => {
+            commands::rate_limiting::get(client, &zone, &rule_id).await
         }
     }
 }

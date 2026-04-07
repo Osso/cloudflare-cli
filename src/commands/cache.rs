@@ -3,16 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::client::Client;
-use crate::commands::tunnels::ApiResponse;
-
-#[derive(Debug, Deserialize)]
-pub struct Zone {
-    pub id: String,
-    pub name: String,
-    pub status: String,
-    #[serde(default)]
-    pub paused: bool,
-}
+use super::{ApiResponse, Zone, find_zone_id};
 
 #[derive(Debug, Serialize)]
 struct PurgeRequest {
@@ -48,21 +39,6 @@ pub async fn list_zones(client: &Client) -> Result<()> {
     }
 
     Ok(())
-}
-
-async fn find_zone_id(client: &Client, zone: &str) -> Result<String> {
-    if zone.len() == 32 && zone.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Ok(zone.to_string());
-    }
-
-    let path = format!("/zones?name={}&account.id={}", zone, client.account_id());
-    let response: ApiResponse<Vec<Zone>> = client.get(&path).await?;
-
-    if response.result.is_empty() {
-        bail!("Zone '{}' not found. Use 'cloudflare cache zones' to list available zones.", zone);
-    }
-
-    Ok(response.result[0].id.clone())
 }
 
 fn build_purge_request(urls: Option<Vec<String>>, all: bool) -> Result<PurgeRequest> {

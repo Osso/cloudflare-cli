@@ -2,7 +2,7 @@ use anyhow::Result;
 use serde::Deserialize;
 
 use crate::client::Client;
-use crate::commands::tunnels::ApiResponse;
+use super::ApiResponse;
 
 #[derive(Debug, Deserialize)]
 pub struct GatewayRule {

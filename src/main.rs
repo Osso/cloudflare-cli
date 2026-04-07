@@ -78,6 +78,11 @@ enum Commands {
         #[command(subcommand)]
         action: RumCommands,
     },
+    /// Rate limiting rules (http_ratelimit phase)
+    RateLimiting {
+        #[command(subcommand)]
+        action: RateLimitingCommands,
+    },
     /// HTTP traffic analytics
     Analytics {
         #[command(subcommand)]
@@ -474,6 +479,22 @@ enum RumCommands {
         /// Web Analytics site (host or site_tag)
         #[arg(name = "SITE")]
         rum_site: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum RateLimitingCommands {
+    /// List all rate limiting rules for a zone
+    List {
+        /// Zone name (domain) or zone ID
+        zone: String,
+    },
+    /// Get details of a specific rate limiting rule
+    Get {
+        /// Zone name (domain) or zone ID
+        zone: String,
+        /// Rule ID
+        rule_id: String,
     },
 }
 

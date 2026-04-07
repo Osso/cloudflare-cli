@@ -2,12 +2,7 @@ use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::client::Client;
-
-#[derive(Debug, Deserialize)]
-pub struct ApiResponse<T> {
-    pub result: T,
-    pub success: bool,
-}
+use super::ApiResponse;
 
 #[derive(Debug, Deserialize)]
 pub struct Tunnel {
