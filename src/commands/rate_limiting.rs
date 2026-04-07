@@ -1,8 +1,8 @@
 use anyhow::Result;
 use serde::Deserialize;
 
-use crate::client::Client;
 use super::find_zone_id;
+use crate::client::Client;
 
 #[derive(Debug, Deserialize)]
 struct RulesetResponse {
@@ -47,7 +47,10 @@ fn is_ruleset_missing(err: &anyhow::Error) -> bool {
 }
 
 async fn fetch_ruleset(client: &Client, zone_id: &str) -> Result<Option<Ruleset>> {
-    let path = format!("/zones/{}/rulesets/phases/http_ratelimit/entrypoint", zone_id);
+    let path = format!(
+        "/zones/{}/rulesets/phases/http_ratelimit/entrypoint",
+        zone_id
+    );
     match client.get::<RulesetResponse>(&path).await {
         Ok(r) => Ok(Some(r.result)),
         Err(e) if is_ruleset_missing(&e) => Ok(None),
@@ -103,7 +106,10 @@ pub async fn list(client: &Client, zone: &str) -> Result<()> {
         return Ok(());
     }
 
-    println!("Rate limiting rules for zone '{}' (ruleset: {}):", zone, ruleset.id);
+    println!(
+        "Rate limiting rules for zone '{}' (ruleset: {}):",
+        zone, ruleset.id
+    );
     println!();
 
     for rule in &ruleset.rules {

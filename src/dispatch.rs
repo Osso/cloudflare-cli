@@ -145,9 +145,7 @@ async fn dispatch_cache(action: CacheCommands, client: &Client) -> Result<()> {
 async fn dispatch_firewall(action: FirewallCommands, client: &Client) -> Result<()> {
     match action {
         FirewallCommands::List { zone } => commands::firewall::list(client, &zone).await,
-        FirewallCommands::Check { zone, ip } => {
-            commands::firewall::check(client, &zone, &ip).await
-        }
+        FirewallCommands::Check { zone, ip } => commands::firewall::check(client, &zone, &ip).await,
         FirewallCommands::Rules { zone } => commands::firewall::rules(client, &zone).await,
         FirewallCommands::Events {
             zone,
@@ -182,7 +180,13 @@ async fn dispatch_dns(action: DnsCommands, client: &Client) -> Result<()> {
             proxied,
             no_proxy,
         } => {
-            let use_proxied = if no_proxy { false } else if proxied { true } else { true };
+            let use_proxied = if no_proxy {
+                false
+            } else if proxied {
+                true
+            } else {
+                true
+            };
             commands::dns::create(client, &zone, &record_type, &name, &content, use_proxied).await
         }
         DnsCommands::Delete { zone, name } => commands::dns::delete(client, &zone, &name).await,
@@ -230,9 +234,7 @@ async fn dispatch_analytics(action: AnalyticsCommands, client: &Client) -> Resul
 
 async fn dispatch_rate_limiting(action: RateLimitingCommands, client: &Client) -> Result<()> {
     match action {
-        RateLimitingCommands::List { zone } => {
-            commands::rate_limiting::list(client, &zone).await
-        }
+        RateLimitingCommands::List { zone } => commands::rate_limiting::list(client, &zone).await,
         RateLimitingCommands::Get { zone, rule_id } => {
             commands::rate_limiting::get(client, &zone, &rule_id).await
         }

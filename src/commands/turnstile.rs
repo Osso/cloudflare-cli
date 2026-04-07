@@ -1,8 +1,8 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::client::Client;
 use super::ApiResponse;
+use crate::client::Client;
 
 #[derive(Debug, Deserialize)]
 pub struct Widget {

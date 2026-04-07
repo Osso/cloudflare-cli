@@ -2,8 +2,8 @@ use anyhow::{Result, bail};
 use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::client::Client;
 use super::{ApiResponse, find_zone_id};
+use crate::client::Client;
 
 #[derive(Debug, Deserialize)]
 pub struct AccessRule {
@@ -473,10 +473,7 @@ pub async fn unblock(client: &Client, zone: &str, ip: &str) -> Result<()> {
     }
 
     for rule in response.result {
-        let delete_path = format!(
-            "/zones/{}/firewall/access_rules/rules/{}",
-            zone_id, rule.id
-        );
+        let delete_path = format!("/zones/{}/firewall/access_rules/rules/{}", zone_id, rule.id);
         client.delete(&delete_path).await?;
         println!("✓ Removed {} rule for {}", rule.mode, ip);
         println!("  Rule ID: {}", rule.id);

@@ -2,8 +2,8 @@ use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::client::Client;
 use super::{ApiResponse, Zone, find_zone_id};
+use crate::client::Client;
 
 #[derive(Debug, Serialize)]
 struct PurgeRequest {
@@ -43,18 +43,29 @@ pub async fn list_zones(client: &Client) -> Result<()> {
 
 fn build_purge_request(urls: Option<Vec<String>>, all: bool) -> Result<PurgeRequest> {
     if all {
-        return Ok(PurgeRequest { purge_everything: Some(true), files: None });
+        return Ok(PurgeRequest {
+            purge_everything: Some(true),
+            files: None,
+        });
     }
     if let Some(files) = urls {
         if files.is_empty() {
             bail!("No URLs provided. Use --url <url> or --all to purge everything.");
         }
-        return Ok(PurgeRequest { purge_everything: None, files: Some(files) });
+        return Ok(PurgeRequest {
+            purge_everything: None,
+            files: Some(files),
+        });
     }
     bail!("Specify --url <url> to purge specific URLs, or --all to purge everything.");
 }
 
-pub async fn purge(client: &Client, zone: &str, urls: Option<Vec<String>>, all: bool) -> Result<()> {
+pub async fn purge(
+    client: &Client,
+    zone: &str,
+    urls: Option<Vec<String>>,
+    all: bool,
+) -> Result<()> {
     let zone_id = find_zone_id(client, zone).await?;
     let request = build_purge_request(urls, all)?;
 
@@ -62,7 +73,10 @@ pub async fn purge(client: &Client, zone: &str, urls: Option<Vec<String>>, all: 
     let response: ApiResponse<PurgeResult> = client.post(&path, &request).await?;
 
     if all {
-        println!("Purged all cache for zone (request ID: {})", response.result.id);
+        println!(
+            "Purged all cache for zone (request ID: {})",
+            response.result.id
+        );
     } else {
         println!("Purged cache (request ID: {})", response.result.id);
     }
@@ -103,7 +117,9 @@ fn format_action_value(value: &Option<Value>) -> String {
         Some(Value::String(s)) => s.clone(),
         Some(Value::Bool(b)) => b.to_string(),
         Some(Value::Number(n)) => n.to_string(),
-        Some(Value::Object(obj)) => serde_json::to_string(obj).unwrap_or_else(|_| "...".to_string()),
+        Some(Value::Object(obj)) => {
+            serde_json::to_string(obj).unwrap_or_else(|_| "...".to_string())
+        }
         Some(other) => other.to_string(),
         None => "on".to_string(),
     }
@@ -120,8 +136,16 @@ pub async fn page_rules(client: &Client, zone: &str) -> Result<()> {
     }
 
     for rule in response.result {
-        let status_icon = if rule.status == "active" { "●" } else { "○" };
-        let url = rule.targets.first().map(|t| t.constraint.value.as_str()).unwrap_or("unknown");
+        let status_icon = if rule.status == "active" {
+            "●"
+        } else {
+            "○"
+        };
+        let url = rule
+            .targets
+            .first()
+            .map(|t| t.constraint.value.as_str())
+            .unwrap_or("unknown");
         println!("{} [{}] {}", status_icon, rule.priority, url);
         for action in &rule.actions {
             println!("  {} = {}", action.id, format_action_value(&action.value));
@@ -157,7 +181,11 @@ struct CacheRule {
 
 fn print_cache_rule(rule: &CacheRule) {
     let status_icon = if rule.enabled { "●" } else { "○" };
-    let desc = if rule.description.is_empty() { &rule.action } else { &rule.description };
+    let desc = if rule.description.is_empty() {
+        &rule.action
+    } else {
+        &rule.description
+    };
     println!("{} {}", status_icon, desc);
     println!("  ID: {}", rule.id);
     println!("  Expression: {}", rule.expression);
@@ -178,7 +206,10 @@ fn print_cache_rule(rule: &CacheRule) {
 async fn find_cache_ruleset(client: &Client, zone_id: &str) -> Result<Option<Ruleset>> {
     let path = format!("/zones/{}/rulesets", zone_id);
     let response: ApiResponse<Vec<Ruleset>> = client.get(&path).await?;
-    Ok(response.result.into_iter().find(|r| r.phase == "http_request_cache_settings"))
+    Ok(response
+        .result
+        .into_iter()
+        .find(|r| r.phase == "http_request_cache_settings"))
 }
 
 async fn fetch_full_ruleset(client: &Client, zone_id: &str, ruleset_id: &str) -> Result<Ruleset> {
@@ -188,16 +219,19 @@ async fn fetch_full_ruleset(client: &Client, zone_id: &str, ruleset_id: &str) ->
 }
 
 fn rules_to_json(rules: &[CacheRule]) -> Vec<Value> {
-    rules.iter().map(|r| {
-        json!({
-            "id": r.id,
-            "expression": r.expression,
-            "description": r.description,
-            "action": r.action,
-            "action_parameters": r.action_parameters,
-            "enabled": r.enabled
+    rules
+        .iter()
+        .map(|r| {
+            json!({
+                "id": r.id,
+                "expression": r.expression,
+                "description": r.description,
+                "action": r.action,
+                "action_parameters": r.action_parameters,
+                "enabled": r.enabled
+            })
         })
-    }).collect()
+        .collect()
 }
 
 pub async fn cache_rules(client: &Client, zone: &str) -> Result<()> {
@@ -205,7 +239,10 @@ pub async fn cache_rules(client: &Client, zone: &str) -> Result<()> {
 
     let ruleset = match find_cache_ruleset(client, &zone_id).await? {
         Some(r) => r,
-        None => { println!("No cache rules configured"); return Ok(()); }
+        None => {
+            println!("No cache rules configured");
+            return Ok(());
+        }
     };
 
     let full = fetch_full_ruleset(client, &zone_id, &ruleset.id).await?;
@@ -255,14 +292,23 @@ fn print_rule_summary(label: &str, id: &str, rule: Option<&CacheRule>) {
     }
 }
 
-async fn append_to_ruleset(client: &Client, zone_id: &str, ruleset: &Ruleset, new_rule: Value) -> Result<()> {
+async fn append_to_ruleset(
+    client: &Client,
+    zone_id: &str,
+    ruleset: &Ruleset,
+    new_rule: Value,
+) -> Result<()> {
     let full = fetch_full_ruleset(client, zone_id, &ruleset.id).await?;
     let mut rules = rules_to_json(&full.rules);
     rules.push(new_rule);
 
     let path = format!("/zones/{}/rulesets/{}", zone_id, ruleset.id);
     let response: ApiResponse<Ruleset> = client.put(&path, &json!({ "rules": rules })).await?;
-    print_rule_summary("Added cache rule to existing ruleset", &ruleset.id, response.result.rules.last());
+    print_rule_summary(
+        "Added cache rule to existing ruleset",
+        &ruleset.id,
+        response.result.rules.last(),
+    );
     Ok(())
 }
 
@@ -275,11 +321,21 @@ async fn create_new_ruleset(client: &Client, zone_id: &str, new_rule: Value) -> 
     });
     let path = format!("/zones/{}/rulesets", zone_id);
     let response: ApiResponse<Ruleset> = client.post(&path, &body).await?;
-    print_rule_summary("Created cache rule ruleset", &response.result.id, response.result.rules.first());
+    print_rule_summary(
+        "Created cache rule ruleset",
+        &response.result.id,
+        response.result.rules.first(),
+    );
     Ok(())
 }
 
-pub async fn create_rule(client: &Client, zone: &str, name: &str, expression: &str, bypass: bool) -> Result<()> {
+pub async fn create_rule(
+    client: &Client,
+    zone: &str,
+    name: &str,
+    expression: &str,
+    bypass: bool,
+) -> Result<()> {
     let zone_id = find_zone_id(client, zone).await?;
     let new_rule = build_rule_json(name, expression, bypass);
 
@@ -289,17 +345,28 @@ pub async fn create_rule(client: &Client, zone: &str, name: &str, expression: &s
     }
 }
 
-async fn find_required_cache_ruleset(client: &Client, zone_id: &str, zone: &str) -> Result<Ruleset> {
-    find_cache_ruleset(client, zone_id).await?.ok_or_else(|| {
-        anyhow::anyhow!("No cache rules ruleset found for zone '{}'", zone)
-    })
+async fn find_required_cache_ruleset(
+    client: &Client,
+    zone_id: &str,
+    zone: &str,
+) -> Result<Ruleset> {
+    find_cache_ruleset(client, zone_id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("No cache rules ruleset found for zone '{}'", zone))
 }
 
 fn find_rule_index(rules: &[CacheRule], name: &str) -> Result<usize> {
-    rules.iter().position(|r| r.description == name).ok_or_else(|| {
-        let available: Vec<&str> = rules.iter().map(|r| r.description.as_str()).collect();
-        anyhow::anyhow!("Rule '{}' not found. Available rules: {}", name, available.join(", "))
-    })
+    rules
+        .iter()
+        .position(|r| r.description == name)
+        .ok_or_else(|| {
+            let available: Vec<&str> = rules.iter().map(|r| r.description.as_str()).collect();
+            anyhow::anyhow!(
+                "Rule '{}' not found. Available rules: {}",
+                name,
+                available.join(", ")
+            )
+        })
 }
 
 pub async fn update_rule(client: &Client, zone: &str, name: &str, expression: &str) -> Result<()> {
@@ -308,24 +375,44 @@ pub async fn update_rule(client: &Client, zone: &str, name: &str, expression: &s
     let full = fetch_full_ruleset(client, &zone_id, &ruleset.id).await?;
     let rule_idx = find_rule_index(&full.rules, name)?;
 
-    let rules: Vec<Value> = full.rules.iter().enumerate().map(|(i, r)| {
-        let expr = if i == rule_idx { expression } else { &r.expression };
-        json!({
-            "id": r.id, "expression": expr, "description": r.description,
-            "action": r.action, "action_parameters": r.action_parameters, "enabled": r.enabled
+    let rules: Vec<Value> = full
+        .rules
+        .iter()
+        .enumerate()
+        .map(|(i, r)| {
+            let expr = if i == rule_idx {
+                expression
+            } else {
+                &r.expression
+            };
+            json!({
+                "id": r.id, "expression": expr, "description": r.description,
+                "action": r.action, "action_parameters": r.action_parameters, "enabled": r.enabled
+            })
         })
-    }).collect();
+        .collect();
 
     let path = format!("/zones/{}/rulesets/{}", zone_id, ruleset.id);
     let response: ApiResponse<Ruleset> = client.put(&path, &json!({ "rules": rules })).await?;
-    print_rule_summary("Updated cache rule", &ruleset.id, response.result.rules.get(rule_idx));
+    print_rule_summary(
+        "Updated cache rule",
+        &ruleset.id,
+        response.result.rules.get(rule_idx),
+    );
     Ok(())
 }
 
 fn find_rule_for_delete<'a>(rules: &'a [CacheRule], rule_id: &str) -> Result<&'a str> {
     let rule = rules.iter().find(|r| r.id == rule_id).ok_or_else(|| {
-        let available: Vec<String> = rules.iter().map(|r| format!("  {} - {}", r.id, r.description)).collect();
-        anyhow::anyhow!("Rule '{}' not found. Available rules:\n{}", rule_id, available.join("\n"))
+        let available: Vec<String> = rules
+            .iter()
+            .map(|r| format!("  {} - {}", r.id, r.description))
+            .collect();
+        anyhow::anyhow!(
+            "Rule '{}' not found. Available rules:\n{}",
+            rule_id,
+            available.join("\n")
+        )
     })?;
     Ok(&rule.description)
 }
@@ -336,12 +423,17 @@ pub async fn delete_rule(client: &Client, zone: &str, rule_id: &str) -> Result<(
     let full = fetch_full_ruleset(client, &zone_id, &ruleset.id).await?;
     let description = find_rule_for_delete(&full.rules, rule_id)?.to_string();
 
-    let rules: Vec<Value> = full.rules.iter().filter(|r| r.id != rule_id).map(|r| {
-        json!({
-            "id": r.id, "expression": r.expression, "description": r.description,
-            "action": r.action, "action_parameters": r.action_parameters, "enabled": r.enabled
+    let rules: Vec<Value> = full
+        .rules
+        .iter()
+        .filter(|r| r.id != rule_id)
+        .map(|r| {
+            json!({
+                "id": r.id, "expression": r.expression, "description": r.description,
+                "action": r.action, "action_parameters": r.action_parameters, "enabled": r.enabled
+            })
         })
-    }).collect();
+        .collect();
 
     let path = format!("/zones/{}/rulesets/{}", zone_id, ruleset.id);
     let _: ApiResponse<Ruleset> = client.put(&path, &json!({ "rules": rules })).await?;

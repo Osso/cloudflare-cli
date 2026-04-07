@@ -1,8 +1,8 @@
 use anyhow::Result;
 use serde::Deserialize;
 
-use crate::client::Client;
 use super::{ApiResponse, find_zone_id};
+use crate::client::Client;
 
 #[derive(Debug, Deserialize)]
 pub struct WaitingRoom {

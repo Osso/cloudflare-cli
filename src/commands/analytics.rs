@@ -2,8 +2,8 @@ use anyhow::{Result, bail};
 use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::client::Client;
 use super::find_zone_id;
+use crate::client::Client;
 
 #[derive(Debug, Serialize)]
 struct GraphQLQuery {
@@ -131,12 +131,23 @@ fn print_status_table(groups: &[HttpRequestGroup]) {
     println!("{}", "-".repeat(62));
 
     let totals = groups.iter().fold(
-        StatusCounts { total: 0, s2xx: 0, s3xx: 0, s4xx: 0, s5xx: 0 },
+        StatusCounts {
+            total: 0,
+            s2xx: 0,
+            s3xx: 0,
+            s4xx: 0,
+            s5xx: 0,
+        },
         |mut acc, group| {
             let c = count_by_class(&group.sum);
             println!(
                 "{:<14} {:>8} {:>8} {:>8} {:>8} {:>8}{}",
-                group.dimensions.date, c.total, c.s2xx, c.s3xx, c.s4xx, c.s5xx,
+                group.dimensions.date,
+                c.total,
+                c.s2xx,
+                c.s3xx,
+                c.s4xx,
+                c.s5xx,
                 warn(c.s5xx)
             );
             acc.total += c.total;
