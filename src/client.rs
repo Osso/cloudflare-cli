@@ -89,7 +89,8 @@ impl Client {
         path: &str,
         body: &B,
     ) -> Result<T> {
-        self.send_json(reqwest::Method::POST, path, Some(body)).await
+        self.send_json(reqwest::Method::POST, path, Some(body))
+            .await
     }
 
     pub async fn delete(&self, path: &str) -> Result<()> {
@@ -114,7 +115,8 @@ impl Client {
     }
 
     pub async fn graphql<T: DeserializeOwned, B: serde::Serialize>(&self, body: &B) -> Result<T> {
-        self.send_json::<T, B>(reqwest::Method::POST, "/graphql", Some(body)).await
+        self.send_json::<T, B>(reqwest::Method::POST, "/graphql", Some(body))
+            .await
     }
 
     pub fn account_id(&self) -> &str {

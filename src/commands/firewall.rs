@@ -360,7 +360,10 @@ fn print_firewall_event(event: &FirewallEvent) {
         action_icon, event.action, event.source, event.client_ip, event.request_path, query_suffix
     );
     println!("  Time: {}", event.datetime);
-    println!("  Country: {} | ASN: {}", event.client_country, event.client_asn);
+    println!(
+        "  Country: {} | ASN: {}",
+        event.client_country, event.client_asn
+    );
     if !event.rule_id.is_empty() {
         println!("  Rule: {}", event.rule_id);
     }
@@ -394,7 +397,10 @@ pub async fn events(
 
     if events.is_empty() {
         match ip {
-            Some(ip_addr) => println!("No security events for IP {} in the last {} hours", ip_addr, hours),
+            Some(ip_addr) => println!(
+                "No security events for IP {} in the last {} hours",
+                ip_addr, hours
+            ),
             None => println!("No security events in the last {} hours", hours),
         }
         return Ok(());
@@ -559,7 +565,10 @@ pub async fn ratelimit(
     action: &str,
 ) -> Result<()> {
     let zone_id = find_zone_id(client, zone).await?;
-    let api_path = format!("/zones/{}/rulesets/phases/http_ratelimit/entrypoint", zone_id);
+    let api_path = format!(
+        "/zones/{}/rulesets/phases/http_ratelimit/entrypoint",
+        zone_id
+    );
 
     let mut all_rules = fetch_existing_ratelimit_rules(client, &api_path).await?;
     let new_rule = build_ratelimit_rule(path, requests, period, action);
