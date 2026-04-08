@@ -62,21 +62,34 @@ impl Client {
         Ok(body)
     }
 
+    async fn send_json<T: DeserializeOwned, B: serde::Serialize>(
+        &self,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<&B>,
+    ) -> Result<T> {
+        let url = format!("{}{}", BASE_URL, path);
+        let mut req = self.http.request(method, &url);
+        if let Some(b) = body {
+            req = req.json(b);
+        }
+        let response = req.send().await?;
+        let status = response.status();
+        let text = response.text().await?;
+
+        if !status.is_success() {
+            anyhow::bail!("API error ({}): {}", status, text);
+        }
+
+        serde_json::from_str(&text).with_context(|| format!("Failed to parse response: {}", text))
+    }
+
     pub async fn post<T: DeserializeOwned, B: serde::Serialize>(
         &self,
         path: &str,
         body: &B,
     ) -> Result<T> {
-        let url = format!("{}{}", BASE_URL, path);
-        let response = self.http.post(&url).json(body).send().await?;
-        let status = response.status();
-        let body = response.text().await?;
-
-        if !status.is_success() {
-            anyhow::bail!("API error ({}): {}", status, body);
-        }
-
-        serde_json::from_str(&body).with_context(|| format!("Failed to parse response: {}", body))
+        self.send_json(reqwest::Method::POST, path, Some(body)).await
     }
 
     pub async fn delete(&self, path: &str) -> Result<()> {
@@ -97,29 +110,11 @@ impl Client {
         path: &str,
         body: &B,
     ) -> Result<T> {
-        let url = format!("{}{}", BASE_URL, path);
-        let response = self.http.put(&url).json(body).send().await?;
-        let status = response.status();
-        let body = response.text().await?;
-
-        if !status.is_success() {
-            anyhow::bail!("API error ({}): {}", status, body);
-        }
-
-        serde_json::from_str(&body).with_context(|| format!("Failed to parse response: {}", body))
+        self.send_json(reqwest::Method::PUT, path, Some(body)).await
     }
 
     pub async fn graphql<T: DeserializeOwned, B: serde::Serialize>(&self, body: &B) -> Result<T> {
-        let url = format!("{}/graphql", BASE_URL);
-        let response = self.http.post(&url).json(body).send().await?;
-        let status = response.status();
-        let body = response.text().await?;
-
-        if !status.is_success() {
-            anyhow::bail!("GraphQL error ({}): {}", status, body);
-        }
-
-        serde_json::from_str(&body).with_context(|| format!("Failed to parse response: {}", body))
+        self.send_json::<T, B>(reqwest::Method::POST, "/graphql", Some(body)).await
     }
 
     pub fn account_id(&self) -> &str {

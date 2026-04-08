@@ -159,8 +159,44 @@ fn print_origin_request(origin_request: &Option<OriginRequest>) {
     }
 }
 
+fn print_access_config(access: &AccessConfig) {
+    println!("Access:");
+    println!("  Required: {}", access.required);
+    println!("  Team: {}", access.team_name);
+    if !access.aud_tag.is_empty() {
+        println!("  AUD Tags:");
+        for tag in &access.aud_tag {
+            println!("    - {}", tag);
+        }
+    }
+}
+
+fn print_origin_details(or: &OriginRequest) {
+    if let Some(access) = &or.access {
+        print_access_config(access);
+    }
+    if or.no_tls_verify == Some(true) {
+        println!("TLS Verify: disabled");
+    }
+    if let Some(header) = &or.http_host_header {
+        println!("Host Header: {}", header);
+    }
+}
+
+fn print_matching_rule(tunnel: &Tunnel, rule: &IngressRule) {
+    let rule_hostname = rule.hostname.as_deref().unwrap_or("");
+    println!("Tunnel: {} ({})", tunnel.name, tunnel.id);
+    println!("Hostname: {}", rule_hostname);
+    if let Some(path) = &rule.path {
+        println!("Path: {}", path);
+    }
+    println!("Service: {}", rule.service);
+    if let Some(or) = &rule.origin_request {
+        print_origin_details(or);
+    }
+}
+
 pub async fn show(client: &Client, hostname: &str) -> Result<()> {
-    // Get all tunnels
     let path = format!("/accounts/{}/cfd_tunnel", client.account_id());
     let tunnels_response: ApiResponse<Vec<Tunnel>> = client.get(&path).await?;
 
@@ -181,35 +217,11 @@ pub async fn show(client: &Client, hostname: &str) -> Result<()> {
         let Some(config) = config_response.result.config else {
             continue;
         };
-        for rule in config.ingress {
+
+        for rule in &config.ingress {
             let rule_hostname = rule.hostname.as_deref().unwrap_or("");
             if rule_hostname == hostname || rule_hostname.contains(hostname) {
-                println!("Tunnel: {} ({})", tunnel.name, tunnel.id);
-                println!("Hostname: {}", rule_hostname);
-                if let Some(path) = &rule.path {
-                    println!("Path: {}", path);
-                }
-                println!("Service: {}", rule.service);
-
-                if let Some(or) = &rule.origin_request {
-                    if let Some(access) = &or.access {
-                        println!("Access:");
-                        println!("  Required: {}", access.required);
-                        println!("  Team: {}", access.team_name);
-                        if !access.aud_tag.is_empty() {
-                            println!("  AUD Tags:");
-                            for tag in &access.aud_tag {
-                                println!("    - {}", tag);
-                            }
-                        }
-                    }
-                    if or.no_tls_verify == Some(true) {
-                        println!("TLS Verify: disabled");
-                    }
-                    if let Some(header) = &or.http_host_header {
-                        println!("Host Header: {}", header);
-                    }
-                }
+                print_matching_rule(&tunnel, rule);
                 return Ok(());
             }
         }

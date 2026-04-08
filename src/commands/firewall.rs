@@ -283,15 +283,7 @@ pub async fn rules(client: &Client, zone: &str) -> Result<()> {
     Ok(())
 }
 
-pub async fn events(
-    client: &Client,
-    zone: &str,
-    ip: Option<&str>,
-    hours: u32,
-    limit: u32,
-) -> Result<()> {
-    let zone_id = find_zone_id(client, zone).await?;
-
+fn build_events_query(zone_id: &str, ip: Option<&str>, hours: u32, limit: u32) -> GraphQLQuery {
     let now = Utc::now();
     let start = now - Duration::hours(hours as i64);
 
@@ -300,7 +292,6 @@ pub async fn events(
         start.format("%Y-%m-%dT%H:%M:%SZ"),
         now.format("%Y-%m-%dT%H:%M:%SZ")
     );
-
     if let Some(ip_addr) = ip {
         filter.push_str(&format!(r#", clientIP: "{}""#, ip_addr));
     }
@@ -332,19 +323,63 @@ pub async fn events(
         zone_id, filter, limit
     );
 
-    let gql_request = GraphQLQuery {
+    GraphQLQuery {
         query,
         variables: serde_json::json!({}),
-    };
+    }
+}
 
-    let response: GraphQLResponse = client.graphql(&gql_request).await?;
-
-    if let Some(errors) = response.errors {
+fn check_graphql_errors(response: &GraphQLResponse) -> Result<()> {
+    if let Some(errors) = &response.errors {
         for err in errors {
             eprintln!("GraphQL error: {}", err.message);
         }
         bail!("GraphQL query failed");
     }
+    Ok(())
+}
+
+fn print_firewall_event(event: &FirewallEvent) {
+    let action_icon = match event.action.as_str() {
+        "block" => "⛔",
+        "challenge" => "❓",
+        "jschallenge" => "🔒",
+        "managed_challenge" => "🤖",
+        "log" => "📝",
+        "allow" => "✓",
+        "skip" => "⏭",
+        _ => "?",
+    };
+    let query_suffix = if event.request_query.is_empty() {
+        String::new()
+    } else {
+        format!("?{}", event.request_query)
+    };
+    println!(
+        "{} {} [{}] {} {}{}",
+        action_icon, event.action, event.source, event.client_ip, event.request_path, query_suffix
+    );
+    println!("  Time: {}", event.datetime);
+    println!("  Country: {} | ASN: {}", event.client_country, event.client_asn);
+    if !event.rule_id.is_empty() {
+        println!("  Rule: {}", event.rule_id);
+    }
+    println!("  Ray: {}", event.ray_id);
+    println!();
+}
+
+pub async fn events(
+    client: &Client,
+    zone: &str,
+    ip: Option<&str>,
+    hours: u32,
+    limit: u32,
+) -> Result<()> {
+    let zone_id = find_zone_id(client, zone).await?;
+    let gql_request = build_events_query(&zone_id, ip, hours, limit);
+    let response: GraphQLResponse = client.graphql(&gql_request).await?;
+
+    check_graphql_errors(&response)?;
 
     let data = response
         .data
@@ -358,52 +393,15 @@ pub async fn events(
     let events = &data.viewer.zones[0].firewall_events;
 
     if events.is_empty() {
-        if let Some(ip_addr) = ip {
-            println!(
-                "No security events for IP {} in the last {} hours",
-                ip_addr, hours
-            );
-        } else {
-            println!("No security events in the last {} hours", hours);
+        match ip {
+            Some(ip_addr) => println!("No security events for IP {} in the last {} hours", ip_addr, hours),
+            None => println!("No security events in the last {} hours", hours),
         }
         return Ok(());
     }
 
     for event in events {
-        let action_icon = match event.action.as_str() {
-            "block" => "⛔",
-            "challenge" => "❓",
-            "jschallenge" => "🔒",
-            "managed_challenge" => "🤖",
-            "log" => "📝",
-            "allow" => "✓",
-            "skip" => "⏭",
-            _ => "?",
-        };
-
-        println!(
-            "{} {} [{}] {} {}{}",
-            action_icon,
-            event.action,
-            event.source,
-            event.client_ip,
-            event.request_path,
-            if event.request_query.is_empty() {
-                String::new()
-            } else {
-                format!("?{}", event.request_query)
-            }
-        );
-        println!("  Time: {}", event.datetime);
-        println!(
-            "  Country: {} | ASN: {}",
-            event.client_country, event.client_asn
-        );
-        if !event.rule_id.is_empty() {
-            println!("  Rule: {}", event.rule_id);
-        }
-        println!("  Ray: {}", event.ray_id);
-        println!();
+        print_firewall_event(event);
     }
 
     Ok(())
@@ -482,25 +480,12 @@ pub async fn unblock(client: &Client, zone: &str, ip: &str) -> Result<()> {
     Ok(())
 }
 
-pub async fn ratelimit(
+async fn fetch_existing_ratelimit_rules(
     client: &Client,
-    zone: &str,
-    path: &str,
-    requests: u32,
-    period: u32,
-    action: &str,
-) -> Result<()> {
-    let zone_id = find_zone_id(client, zone).await?;
-
-    // Rate limiting uses the http_ratelimit phase, not http_request_firewall_custom
-    let api_path = format!(
-        "/zones/{}/rulesets/phases/http_ratelimit/entrypoint",
-        zone_id
-    );
-
-    // Get existing ruleset (may not exist yet - returns 10003 error if no ruleset)
-    let existing_rules: Vec<WafRuleCreate> = match client.get::<RulesetResponse>(&api_path).await {
-        Ok(response) => response
+    api_path: &str,
+) -> Result<Vec<WafRuleCreate>> {
+    match client.get::<RulesetResponse>(api_path).await {
+        Ok(response) => Ok(response
             .result
             .rules
             .into_iter()
@@ -510,36 +495,31 @@ pub async fn ratelimit(
                 expression: r.expression,
                 action: r.action,
                 action_parameters: r.action_parameters,
-                ratelimit: r.ratelimit, // Preserve existing ratelimit config
+                ratelimit: r.ratelimit,
                 enabled: r.enabled,
             })
-            .collect(),
+            .collect()),
         Err(e) => {
             let err_str = e.to_string();
-            // 404 or "could not find entrypoint ruleset" means no ruleset exists yet
             if err_str.contains("404")
                 || err_str.contains("10003")
                 || err_str.contains("could not find")
             {
-                Vec::new()
+                Ok(Vec::new())
             } else {
-                return Err(e);
+                Err(e)
             }
         }
-    };
+    }
+}
 
-    // Build the new rate limit rule
-    let description = format!("Rate limit {} ({} req/{}s)", path, requests, period);
-    let expression = format!(r#"(http.request.uri.path contains "{}")"#, path);
-
-    // For http_ratelimit phase, action is "block" or "managed_challenge"
+fn build_ratelimit_rule(path: &str, requests: u32, period: u32, action: &str) -> WafRuleCreate {
     let mitigation_action = if action == "challenge" {
         "managed_challenge"
     } else {
         "block"
     };
 
-    // action_parameters is only valid for "block" action, not for challenges
     let action_parameters = if mitigation_action == "block" {
         Some(serde_json::json!({
             "response": {
@@ -552,7 +532,6 @@ pub async fn ratelimit(
         None
     };
 
-    // Rate limit configuration - cf.colo.id is mandatory
     let ratelimit = serde_json::json!({
         "characteristics": ["cf.colo.id", "ip.src"],
         "period": period,
@@ -560,22 +539,35 @@ pub async fn ratelimit(
         "mitigation_timeout": period
     });
 
-    let new_rule = WafRuleCreate {
+    WafRuleCreate {
         id: None,
-        description: description.clone(),
-        expression,
+        description: format!("Rate limit {} ({} req/{}s)", path, requests, period),
+        expression: format!(r#"(http.request.uri.path contains "{}")"#, path),
         action: mitigation_action.to_string(),
         action_parameters,
         ratelimit: Some(ratelimit),
         enabled: true,
-    };
+    }
+}
 
-    // Append new rule to existing rules
-    let mut all_rules = existing_rules;
+pub async fn ratelimit(
+    client: &Client,
+    zone: &str,
+    path: &str,
+    requests: u32,
+    period: u32,
+    action: &str,
+) -> Result<()> {
+    let zone_id = find_zone_id(client, zone).await?;
+    let api_path = format!("/zones/{}/rulesets/phases/http_ratelimit/entrypoint", zone_id);
+
+    let mut all_rules = fetch_existing_ratelimit_rules(client, &api_path).await?;
+    let new_rule = build_ratelimit_rule(path, requests, period, action);
+    let mitigation_action = new_rule.action.clone();
+    let description = new_rule.description.clone();
     all_rules.push(new_rule);
 
     let update_request = RulesetUpdateRequest { rules: all_rules };
-
     let _response: RulesetResponse = client.put(&api_path, &update_request).await?;
 
     println!("Created rate limit rule: {}", description);
