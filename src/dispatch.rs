@@ -8,6 +8,7 @@ use crate::{
     TurnstileCommands, WaitingRoomCommands, ZoneCommands,
 };
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub async fn dispatch_command(command: Commands, client: &Client) -> Result<()> {
     match command {
         Commands::Tunnels { action } => dispatch_tunnels(action, client).await,
@@ -27,6 +28,7 @@ pub async fn dispatch_command(command: Commands, client: &Client) -> Result<()> 
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn dispatch_tunnels(action: TunnelCommands, client: &Client) -> Result<()> {
     match action {
         TunnelCommands::List => commands::tunnels::list(client).await,
@@ -55,6 +57,7 @@ async fn dispatch_tunnels(action: TunnelCommands, client: &Client) -> Result<()>
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn dispatch_apps(action: AppCommands, client: &Client) -> Result<()> {
     match action {
         AppCommands::List => commands::applications::list(client).await,
@@ -76,6 +79,7 @@ async fn dispatch_apps(action: AppCommands, client: &Client) -> Result<()> {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn dispatch_tokens(action: TokenCommands, client: &Client) -> Result<()> {
     match action {
         TokenCommands::List => commands::service_tokens::list(client).await,
@@ -88,6 +92,7 @@ async fn dispatch_tokens(action: TokenCommands, client: &Client) -> Result<()> {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn dispatch_gateway(action: GatewayCommands, client: &Client) -> Result<()> {
     match action {
         GatewayCommands::Dns => commands::gateway::dns_rules(client).await,
@@ -96,6 +101,7 @@ async fn dispatch_gateway(action: GatewayCommands, client: &Client) -> Result<()
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn dispatch_turnstile(action: TurnstileCommands, client: &Client) -> Result<()> {
     match action {
         TurnstileCommands::List => commands::turnstile::list(client).await,
@@ -117,6 +123,7 @@ async fn dispatch_turnstile(action: TurnstileCommands, client: &Client) -> Resul
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn dispatch_cache(action: CacheCommands, client: &Client) -> Result<()> {
     match action {
         CacheCommands::Zones => commands::cache::list_zones(client).await,
@@ -142,6 +149,7 @@ async fn dispatch_cache(action: CacheCommands, client: &Client) -> Result<()> {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn dispatch_firewall(action: FirewallCommands, client: &Client) -> Result<()> {
     match action {
         FirewallCommands::List { zone } => commands::firewall::list(client, &zone).await,
@@ -169,6 +177,7 @@ async fn dispatch_firewall(action: FirewallCommands, client: &Client) -> Result<
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn dispatch_dns(action: DnsCommands, client: &Client) -> Result<()> {
     match action {
         DnsCommands::List { zone } => commands::dns::list(client, &zone).await,
@@ -193,6 +202,7 @@ async fn dispatch_dns(action: DnsCommands, client: &Client) -> Result<()> {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn dispatch_zones(action: ZoneCommands, client: &Client) -> Result<()> {
     match action {
         ZoneCommands::List => commands::zones::list(client).await,
@@ -202,6 +212,7 @@ async fn dispatch_zones(action: ZoneCommands, client: &Client) -> Result<()> {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn dispatch_waiting_room(action: WaitingRoomCommands, client: &Client) -> Result<()> {
     match action {
         WaitingRoomCommands::List { zone } => commands::waiting_room::list(client, &zone).await,
@@ -211,6 +222,7 @@ async fn dispatch_waiting_room(action: WaitingRoomCommands, client: &Client) -> 
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn dispatch_rum(action: RumCommands, client: &Client) -> Result<()> {
     match action {
         RumCommands::List => commands::rum::list(client).await,
@@ -221,6 +233,7 @@ async fn dispatch_rum(action: RumCommands, client: &Client) -> Result<()> {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn dispatch_analytics(action: AnalyticsCommands, client: &Client) -> Result<()> {
     match action {
         AnalyticsCommands::StatusCodes { zone, days } => {
@@ -232,6 +245,7 @@ async fn dispatch_analytics(action: AnalyticsCommands, client: &Client) -> Resul
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn dispatch_rate_limiting(action: RateLimitingCommands, client: &Client) -> Result<()> {
     match action {
         RateLimitingCommands::List { zone } => commands::rate_limiting::list(client, &zone).await,

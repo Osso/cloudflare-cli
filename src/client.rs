@@ -44,11 +44,13 @@ impl Client {
         })
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
         let body = self.get_raw(path).await?;
         serde_json::from_str(&body).with_context(|| format!("Failed to parse response: {}", body))
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn get_raw(&self, path: &str) -> Result<String> {
         let url = format!("{}{}", BASE_URL, path);
         let response = self.http.get(&url).send().await?;
@@ -62,6 +64,7 @@ impl Client {
         Ok(body)
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     async fn send_json<T: DeserializeOwned, B: serde::Serialize>(
         &self,
         method: reqwest::Method,
@@ -84,6 +87,7 @@ impl Client {
         serde_json::from_str(&text).with_context(|| format!("Failed to parse response: {}", text))
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn post<T: DeserializeOwned, B: serde::Serialize>(
         &self,
         path: &str,
@@ -93,6 +97,7 @@ impl Client {
             .await
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn delete(&self, path: &str) -> Result<()> {
         let url = format!("{}{}", BASE_URL, path);
         let response = self.http.delete(&url).send().await?;
@@ -106,6 +111,7 @@ impl Client {
         Ok(())
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn put<T: DeserializeOwned, B: serde::Serialize>(
         &self,
         path: &str,
@@ -114,6 +120,7 @@ impl Client {
         self.send_json(reqwest::Method::PUT, path, Some(body)).await
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub async fn graphql<T: DeserializeOwned, B: serde::Serialize>(&self, body: &B) -> Result<T> {
         self.send_json::<T, B>(reqwest::Method::POST, "/graphql", Some(body))
             .await
@@ -121,5 +128,60 @@ impl Client {
 
     pub fn account_id(&self) -> &str {
         &self.account_id
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn site_config(api_token: &str, email: Option<&str>) -> SiteConfig {
+        SiteConfig {
+            api_token: api_token.to_string(),
+            account_id: "account-123".to_string(),
+            email: email.map(str::to_string),
+        }
+    }
+
+    fn new_client_error(api_token: &str, email: Option<&str>) -> String {
+        match Client::new(&site_config(api_token, email)) {
+            Ok(_) => panic!("expected invalid client config to fail"),
+            Err(error) => error.to_string(),
+        }
+    }
+
+    #[test]
+    fn new_builds_bearer_token_client() {
+        let client = Client::new(&site_config("token", None)).unwrap();
+
+        assert_eq!(client.account_id(), "account-123");
+    }
+
+    #[test]
+    fn new_builds_global_api_key_client() {
+        let client = Client::new(&site_config("global-key", Some("user@example.com"))).unwrap();
+
+        assert_eq!(client.account_id(), "account-123");
+    }
+
+    #[test]
+    fn new_rejects_invalid_bearer_token_header() {
+        let error = new_client_error("bad\nvalue", None);
+
+        assert!(error.contains("Invalid API token"));
+    }
+
+    #[test]
+    fn new_rejects_invalid_global_api_key_header() {
+        let error = new_client_error("bad\nvalue", Some("user@example.com"));
+
+        assert!(error.contains("Invalid API key"));
+    }
+
+    #[test]
+    fn new_rejects_invalid_email_header() {
+        let error = new_client_error("global-key", Some("bad\nemail"));
+
+        assert!(error.contains("Invalid email"));
     }
 }

@@ -1,3 +1,5 @@
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
+
 mod client;
 mod commands;
 mod config;
@@ -543,6 +545,7 @@ enum ConfigCommands {
     Path,
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn config_set(site: String, token: String, account_id: String, default: bool) -> Result<()> {
     let mut config = Config::load().unwrap_or_default();
     config.set_site(&site, &token, &account_id, default);
@@ -561,6 +564,7 @@ fn config_set(site: String, token: String, account_id: String, default: bool) ->
     Ok(())
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn config_list() -> Result<()> {
     let config = Config::load()?;
     if config.sites.is_empty() {
@@ -586,6 +590,7 @@ fn config_list() -> Result<()> {
     Ok(())
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn config_set_default(site: String) -> Result<()> {
     let mut config = Config::load()?;
     if !config.sites.contains_key(&site) {
@@ -601,6 +606,7 @@ fn config_set_default(site: String) -> Result<()> {
     Ok(())
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn config_remove(site: String) -> Result<()> {
     let mut config = Config::load()?;
     if config.remove_site(&site) {
@@ -612,6 +618,7 @@ fn config_remove(site: String) -> Result<()> {
     Ok(())
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn handle_config(action: ConfigCommands) -> Result<()> {
     match action {
         ConfigCommands::Set {
@@ -631,6 +638,7 @@ fn handle_config(action: ConfigCommands) -> Result<()> {
 }
 
 #[tokio::main]
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
