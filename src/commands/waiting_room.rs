@@ -66,28 +66,31 @@ pub async fn list(client: &Client, zone: &str) -> Result<()> {
     Ok(())
 }
 
-pub async fn show(client: &Client, zone: &str, id: &str) -> Result<()> {
-    let zone_id = find_zone_id(client, zone).await?;
-    let path = format!("/zones/{}/waiting_rooms/{}", zone_id, id);
-    let response: ApiResponse<WaitingRoom> = client.get(&path).await?;
-
-    let room = response.result;
-    let status = if room.suspended {
-        "suspended"
+fn room_status(room: &WaitingRoom) -> (&'static str, &'static str) {
+    if room.suspended {
+        ("○", "suspended")
     } else {
-        "active"
-    };
-    let status_icon = if room.suspended { "○" } else { "●" };
+        ("●", "active")
+    }
+}
 
-    println!("{} {} ({})", status_icon, room.name, status);
+fn print_room_overview(room: &WaitingRoom) {
+    let (icon, status) = room_status(room);
+    println!("{} {} ({})", icon, room.name, status);
     println!("  ID: {}", room.id);
     if !room.description.is_empty() {
         println!("  Description: {}", room.description);
     }
+}
+
+fn print_target(room: &WaitingRoom) {
     println!();
     println!("Target:");
     println!("  Host: {}", room.host);
     println!("  Path: {}", room.path);
+}
+
+fn print_queue_settings(room: &WaitingRoom) {
     println!();
     println!("Queue Settings:");
     println!("  Total active users: {}", room.total_active_users);
@@ -95,6 +98,9 @@ pub async fn show(client: &Client, zone: &str, id: &str) -> Result<()> {
     println!("  Session duration: {} minutes", room.session_duration);
     println!("  Queue all: {}", room.queue_all);
     println!("  Queueing method: {}", room.queueing_method);
+}
+
+fn print_options(room: &WaitingRoom) {
     println!();
     println!("Options:");
     println!(
@@ -105,10 +111,26 @@ pub async fn show(client: &Client, zone: &str, id: &str) -> Result<()> {
     if !room.cookie_suffix.is_empty() {
         println!("  Cookie suffix: {}", room.cookie_suffix);
     }
+}
+
+fn print_timestamps(room: &WaitingRoom) {
     println!();
     println!("Timestamps:");
     println!("  Created: {}", room.created_on);
     println!("  Modified: {}", room.modified_on);
+}
+
+pub async fn show(client: &Client, zone: &str, id: &str) -> Result<()> {
+    let zone_id = find_zone_id(client, zone).await?;
+    let path = format!("/zones/{}/waiting_rooms/{}", zone_id, id);
+    let response: ApiResponse<WaitingRoom> = client.get(&path).await?;
+
+    let room = response.result;
+    print_room_overview(&room);
+    print_target(&room);
+    print_queue_settings(&room);
+    print_options(&room);
+    print_timestamps(&room);
 
     Ok(())
 }

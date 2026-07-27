@@ -263,6 +263,57 @@ async fn put_config(client: &Client, tunnel_id: &str, config: &TunnelConfig) -> 
     Ok(())
 }
 
+fn ensure_hostname_not_present(config: &TunnelConfigInner, hostname: &str) -> Result<()> {
+    if config
+        .ingress
+        .iter()
+        .any(|rule| rule.hostname.as_deref() == Some(hostname))
+    {
+        bail!(
+            "Hostname '{}' already exists in tunnel configuration",
+            hostname
+        );
+    }
+    Ok(())
+}
+
+fn build_access_config(access_aud: Option<&str>) -> Option<AccessConfig> {
+    access_aud.map(|aud| AccessConfig {
+        aud_tag: vec![aud.to_string()],
+        required: true,
+        team_name: "globalcomixdev".to_string(),
+    })
+}
+
+fn build_ingress_rule(hostname: &str, service: &str, access: Option<AccessConfig>) -> IngressRule {
+    IngressRule {
+        hostname: Some(hostname.to_string()),
+        service: service.to_string(),
+        path: None,
+        origin_request: Some(OriginRequest {
+            access,
+            no_tls_verify: None,
+            http_host_header: None,
+        }),
+    }
+}
+
+fn find_insert_position(config: &TunnelConfigInner) -> usize {
+    config
+        .ingress
+        .iter()
+        .position(|rule| rule.hostname.is_none())
+        .unwrap_or(config.ingress.len())
+}
+
+fn print_add_domain_result(hostname: &str, service: &str, access_aud: Option<&str>) {
+    if access_aud.is_some() {
+        println!("Added {} -> {} [access:required]", hostname, service);
+    } else {
+        println!("Added {} -> {}", hostname, service);
+    }
+}
+
 pub async fn add_domain(
     client: &Client,
     tunnel_id: &str,
@@ -274,53 +325,15 @@ pub async fn add_domain(
     let mut config = get_config(client, &tunnel_id).await?;
     let inner = config.config.as_mut().unwrap(); // Safe: get_config ensures it's Some
 
-    // Check for duplicate hostname
-    if inner
-        .ingress
-        .iter()
-        .any(|r| r.hostname.as_deref() == Some(hostname))
-    {
-        bail!(
-            "Hostname '{}' already exists in tunnel configuration",
-            hostname
-        );
-    }
-
-    // Create access config if AUD provided
-    let access = access_aud.map(|aud| AccessConfig {
-        aud_tag: vec![aud.to_string()],
-        required: true,
-        team_name: "globalcomixdev".to_string(),
-    });
-
-    // Create new ingress rule
-    let new_rule = IngressRule {
-        hostname: Some(hostname.to_string()),
-        service: service.to_string(),
-        path: None,
-        origin_request: Some(OriginRequest {
-            access,
-            no_tls_verify: None,
-            http_host_header: None,
-        }),
-    };
-
-    // Insert before the catch-all (last entry without hostname)
-    let insert_pos = inner
-        .ingress
-        .iter()
-        .position(|r| r.hostname.is_none())
-        .unwrap_or(inner.ingress.len());
+    ensure_hostname_not_present(inner, hostname)?;
+    let access = build_access_config(access_aud);
+    let new_rule = build_ingress_rule(hostname, service, access);
+    let insert_pos = find_insert_position(inner);
 
     inner.ingress.insert(insert_pos, new_rule);
 
     put_config(client, &tunnel_id, &config).await?;
-
-    if access_aud.is_some() {
-        println!("Added {} -> {} [access:required]", hostname, service);
-    } else {
-        println!("Added {} -> {}", hostname, service);
-    }
+    print_add_domain_result(hostname, service, access_aud);
     Ok(())
 }
 

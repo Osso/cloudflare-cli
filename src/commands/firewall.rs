@@ -229,6 +229,50 @@ struct WafRuleCreate {
     enabled: bool,
 }
 
+fn waf_action_icon(action: &str) -> &str {
+    match action {
+        "block" => "⛔",
+        "challenge" => "❓",
+        "js_challenge" => "🔒",
+        "managed_challenge" => "🤖",
+        "skip" => "⏭",
+        "log" => "📝",
+        _ => "?",
+    }
+}
+
+fn rule_description(rule: &WafRule) -> &str {
+    if rule.description.is_empty() {
+        "(no description)"
+    } else {
+        &rule.description
+    }
+}
+
+fn print_waf_rule(rule: &WafRule) {
+    let status = if rule.enabled { "●" } else { "○" };
+    let action_icon = waf_action_icon(&rule.action);
+    println!(
+        "{} {} {} {}",
+        status,
+        action_icon,
+        rule.action,
+        rule_description(rule)
+    );
+    println!("  ID: {}", rule.id);
+    println!("  Expression: {}", rule.expression);
+    println!();
+}
+
+async fn fetch_custom_ruleset(client: &Client, path: &str) -> Result<Option<Ruleset>> {
+    let response: RulesetResponse = match client.get(path).await {
+        Ok(response) => response,
+        Err(error) if error.to_string().contains("404") => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    Ok(Some(response.result))
+}
+
 pub async fn rules(client: &Client, zone: &str) -> Result<()> {
     let zone_id = find_zone_id(client, zone).await?;
 
@@ -237,91 +281,75 @@ pub async fn rules(client: &Client, zone: &str) -> Result<()> {
         zone_id
     );
 
-    let response: RulesetResponse = match client.get(&path).await {
-        Ok(r) => r,
-        Err(e) => {
-            if e.to_string().contains("404") {
-                println!("No custom WAF rules configured");
-                return Ok(());
-            }
-            return Err(e);
-        }
+    let Some(ruleset) = fetch_custom_ruleset(client, &path).await? else {
+        println!("No custom WAF rules configured");
+        return Ok(());
     };
 
-    if response.result.rules.is_empty() {
+    if ruleset.rules.is_empty() {
         println!("No custom WAF rules configured");
         return Ok(());
     }
 
-    for rule in &response.result.rules {
-        let status = if rule.enabled { "●" } else { "○" };
-        let action_icon = match rule.action.as_str() {
-            "block" => "⛔",
-            "challenge" => "❓",
-            "js_challenge" => "🔒",
-            "managed_challenge" => "🤖",
-            "skip" => "⏭",
-            "log" => "📝",
-            _ => "?",
-        };
-        println!(
-            "{} {} {} {}",
-            status,
-            action_icon,
-            rule.action,
-            if rule.description.is_empty() {
-                "(no description)"
-            } else {
-                &rule.description
-            }
-        );
-        println!("  ID: {}", rule.id);
-        println!("  Expression: {}", rule.expression);
-        println!();
+    for rule in &ruleset.rules {
+        print_waf_rule(rule);
     }
 
     Ok(())
 }
 
-fn build_events_query(zone_id: &str, ip: Option<&str>, hours: u32, limit: u32) -> GraphQLQuery {
-    let now = Utc::now();
-    let start = now - Duration::hours(hours as i64);
+const EVENTS_QUERY_TEMPLATE: &str = r#"query {
+    viewer {
+        zones(filter: { zoneTag: "__ZONE_ID__" }) {
+            firewallEventsAdaptive(
+                filter: { __FILTER__ }
+                limit: __LIMIT__
+                orderBy: [datetime_DESC]
+            ) {
+                action
+                clientAsn
+                clientCountryName
+                clientIP
+                clientRequestPath
+                clientRequestQuery
+                datetime
+                source
+                userAgent
+                rayName
+                ruleId
+            }
+        }
+    }
+}"#;
 
+fn build_events_filter(
+    start: chrono::DateTime<Utc>,
+    end: chrono::DateTime<Utc>,
+    ip: Option<&str>,
+) -> String {
     let mut filter = format!(
         r#"datetime_geq: "{}", datetime_leq: "{}""#,
         start.format("%Y-%m-%dT%H:%M:%SZ"),
-        now.format("%Y-%m-%dT%H:%M:%SZ")
+        end.format("%Y-%m-%dT%H:%M:%SZ")
     );
     if let Some(ip_addr) = ip {
         filter.push_str(&format!(r#", clientIP: "{}""#, ip_addr));
     }
+    filter
+}
 
-    let query = format!(
-        r#"query {{
-            viewer {{
-                zones(filter: {{ zoneTag: "{}" }}) {{
-                    firewallEventsAdaptive(
-                        filter: {{ {} }}
-                        limit: {}
-                        orderBy: [datetime_DESC]
-                    ) {{
-                        action
-                        clientAsn
-                        clientCountryName
-                        clientIP
-                        clientRequestPath
-                        clientRequestQuery
-                        datetime
-                        source
-                        userAgent
-                        rayName
-                        ruleId
-                    }}
-                }}
-            }}
-        }}"#,
-        zone_id, filter, limit
-    );
+fn render_events_query(zone_id: &str, filter: &str, limit: u32) -> String {
+    EVENTS_QUERY_TEMPLATE
+        .replace("__ZONE_ID__", zone_id)
+        .replace("__FILTER__", filter)
+        .replace("__LIMIT__", &limit.to_string())
+}
+
+fn build_events_query(zone_id: &str, ip: Option<&str>, hours: u32, limit: u32) -> GraphQLQuery {
+    let end = Utc::now();
+    let start = end - Duration::hours(hours as i64);
+    let filter = build_events_filter(start, end, ip);
+    let query = render_events_query(zone_id, &filter, limit);
 
     GraphQLQuery {
         query,

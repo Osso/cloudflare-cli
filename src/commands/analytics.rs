@@ -63,31 +63,32 @@ struct ResponseStatus {
     requests: u64,
 }
 
-fn build_query(zone_id: &str, start: &NaiveDate, end: &NaiveDate) -> GraphQLQuery {
-    let query = format!(
-        r#"query {{
-            viewer {{
-                zones(filter: {{ zoneTag: "{}" }}) {{
-                    httpRequests1dGroups(
-                        filter: {{ date_geq: "{}", date_leq: "{}" }}
-                        limit: 100
-                        orderBy: [date_ASC]
-                    ) {{
-                        dimensions {{ date }}
-                        sum {{
-                            requests
-                            responseStatusMap {{ edgeResponseStatus requests }}
-                        }}
-                    }}
-                }}
-            }}
-        }}"#,
-        zone_id, start, end
-    );
+const STATUS_CODES_QUERY: &str = r#"query StatusCodes($zoneTag: String, $start: String, $end: String) {
+    viewer {
+        zones(filter: { zoneTag: $zoneTag }) {
+            httpRequests1dGroups(
+                filter: { date_geq: $start, date_leq: $end }
+                limit: 100
+                orderBy: [date_ASC]
+            ) {
+                dimensions { date }
+                sum {
+                    requests
+                    responseStatusMap { edgeResponseStatus requests }
+                }
+            }
+        }
+    }
+}"#;
 
+fn build_query(zone_id: &str, start: &NaiveDate, end: &NaiveDate) -> GraphQLQuery {
     GraphQLQuery {
-        query,
-        variables: serde_json::json!({}),
+        query: STATUS_CODES_QUERY.to_string(),
+        variables: serde_json::json!({
+            "zoneTag": zone_id,
+            "start": start.to_string(),
+            "end": end.to_string(),
+        }),
     }
 }
 
@@ -121,16 +122,33 @@ fn count_by_class(sum: &Sum) -> StatusCounts {
     counts
 }
 
-fn print_status_table(groups: &[HttpRequestGroup]) {
-    let warn = |n: u64| if n > 0 { " !" } else { "" };
+fn warn_suffix(count: u64) -> &'static str {
+    if count > 0 { " !" } else { "" }
+}
 
+fn print_table_header() {
     println!(
         "{:<14} {:>8} {:>8} {:>8} {:>8} {:>8}",
         "Date", "Total", "2xx", "3xx", "4xx", "5xx"
     );
     println!("{}", "-".repeat(62));
+}
 
-    let totals = groups.iter().fold(
+fn print_table_row(label: &str, counts: &StatusCounts) {
+    println!(
+        "{:<14} {:>8} {:>8} {:>8} {:>8} {:>8}{}",
+        label,
+        counts.total,
+        counts.s2xx,
+        counts.s3xx,
+        counts.s4xx,
+        counts.s5xx,
+        warn_suffix(counts.s5xx)
+    );
+}
+
+fn print_group_rows(groups: &[HttpRequestGroup]) -> StatusCounts {
+    groups.iter().fold(
         StatusCounts {
             total: 0,
             s2xx: 0,
@@ -138,39 +156,26 @@ fn print_status_table(groups: &[HttpRequestGroup]) {
             s4xx: 0,
             s5xx: 0,
         },
-        |mut acc, group| {
-            let c = count_by_class(&group.sum);
-            println!(
-                "{:<14} {:>8} {:>8} {:>8} {:>8} {:>8}{}",
-                group.dimensions.date,
-                c.total,
-                c.s2xx,
-                c.s3xx,
-                c.s4xx,
-                c.s5xx,
-                warn(c.s5xx)
-            );
-            acc.total += c.total;
-            acc.s2xx += c.s2xx;
-            acc.s3xx += c.s3xx;
-            acc.s4xx += c.s4xx;
-            acc.s5xx += c.s5xx;
-            acc
+        |mut totals, group| {
+            let counts = count_by_class(&group.sum);
+            print_table_row(&group.dimensions.date, &counts);
+            totals.total += counts.total;
+            totals.s2xx += counts.s2xx;
+            totals.s3xx += counts.s3xx;
+            totals.s4xx += counts.s4xx;
+            totals.s5xx += counts.s5xx;
+            totals
         },
-    );
+    )
+}
+
+fn print_status_table(groups: &[HttpRequestGroup]) {
+    print_table_header();
+    let totals = print_group_rows(groups);
 
     if groups.len() > 1 {
         println!("{}", "-".repeat(62));
-        println!(
-            "{:<14} {:>8} {:>8} {:>8} {:>8} {:>8}{}",
-            "Total",
-            totals.total,
-            totals.s2xx,
-            totals.s3xx,
-            totals.s4xx,
-            totals.s5xx,
-            warn(totals.s5xx)
-        );
+        print_table_row("Total", &totals);
     }
 }
 
