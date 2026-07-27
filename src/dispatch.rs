@@ -49,6 +49,19 @@ async fn dispatch_tunnels(action: TunnelCommands, client: &Client) -> Result<()>
             )
             .await
         }
+        TunnelCommands::SetOriginServerName {
+            tunnel,
+            hostname,
+            origin_server_name,
+        } => {
+            commands::tunnels::update_origin_server_name(
+                client,
+                &tunnel,
+                &hostname,
+                &origin_server_name,
+            )
+            .await
+        }
         TunnelCommands::RemoveDomain { tunnel, hostname } => {
             commands::tunnels::remove_domain(client, &tunnel, &hostname).await
         }

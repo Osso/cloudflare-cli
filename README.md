@@ -22,6 +22,7 @@ cloudflare config
 
 ```bash
 cloudflare tunnels      # Manage Cloudflare Tunnels
+cloudflare tunnels set-origin-server-name <tunnel> <hostname> <origin-server-name>
 cloudflare apps         # Manage Access Applications
 cloudflare gateway      # Manage Gateway firewall rules
 ```

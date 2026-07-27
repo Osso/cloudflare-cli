@@ -65,6 +65,12 @@ pub struct OriginRequest {
         skip_serializing_if = "Option::is_none"
     )]
     pub http_host_header: Option<String>,
+    #[serde(
+        default,
+        rename = "originServerName",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub origin_server_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -154,6 +160,10 @@ fn print_origin_request(origin_request: &Option<OriginRequest>) {
         flags.push(format!("host:{}", header));
     }
 
+    if let Some(server_name) = &or.origin_server_name {
+        flags.push(format!("originServerName:{}", server_name));
+    }
+
     if !flags.is_empty() {
         print!(" [{}]", flags.join(", "));
     }
@@ -180,6 +190,9 @@ fn print_origin_details(or: &OriginRequest) {
     }
     if let Some(header) = &or.http_host_header {
         println!("Host Header: {}", header);
+    }
+    if let Some(server_name) = &or.origin_server_name {
+        println!("Origin Server Name: {}", server_name);
     }
 }
 
@@ -294,6 +307,7 @@ fn build_ingress_rule(hostname: &str, service: &str, access: Option<AccessConfig
             access,
             no_tls_verify: None,
             http_host_header: None,
+            origin_server_name: None,
         }),
     }
 }
@@ -334,6 +348,49 @@ pub async fn add_domain(
 
     put_config(client, &tunnel_id, &config).await?;
     print_add_domain_result(hostname, service, access_aud);
+    Ok(())
+}
+
+fn set_origin_server_name(
+    config: &mut TunnelConfigInner,
+    hostname: &str,
+    origin_server_name: &str,
+) -> Result<()> {
+    let rule = config
+        .ingress
+        .iter_mut()
+        .find(|rule| rule.hostname.as_deref() == Some(hostname))
+        .ok_or_else(|| {
+            anyhow::anyhow!("Hostname '{}' not found in tunnel configuration", hostname)
+        })?;
+
+    let origin_request = rule.origin_request.get_or_insert_with(|| OriginRequest {
+        access: None,
+        no_tls_verify: None,
+        http_host_header: None,
+        origin_server_name: None,
+    });
+    origin_request.origin_server_name = Some(origin_server_name.to_string());
+    Ok(())
+}
+
+pub async fn update_origin_server_name(
+    client: &Client,
+    tunnel_id: &str,
+    hostname: &str,
+    origin_server_name: &str,
+) -> Result<()> {
+    let tunnel_id = resolve_tunnel_id(client, tunnel_id).await?;
+    let mut config = get_config(client, &tunnel_id).await?;
+    let inner = config.config.as_mut().unwrap(); // Safe: get_config ensures it's Some
+
+    set_origin_server_name(inner, hostname, origin_server_name)?;
+    put_config(client, &tunnel_id, &config).await?;
+
+    println!(
+        "Set origin server name for {} to {}",
+        hostname, origin_server_name
+    );
     Ok(())
 }
 
@@ -407,6 +464,49 @@ struct CreatedTunnel {
     id: String,
     name: String,
     token: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn set_origin_server_name_preserves_existing_origin_settings() {
+        let mut config = TunnelConfigInner {
+            ingress: vec![IngressRule {
+                hostname: Some("deploy-bot-ci.globalcomixdev.com".to_string()),
+                service: "https://deploy-bot.ops.svc.cluster.local:443".to_string(),
+                path: None,
+                origin_request: Some(OriginRequest {
+                    access: Some(AccessConfig {
+                        aud_tag: vec!["aud-tag".to_string()],
+                        required: true,
+                        team_name: "globalcomixdev".to_string(),
+                    }),
+                    no_tls_verify: None,
+                    http_host_header: Some("existing.example.com".to_string()),
+                    origin_server_name: None,
+                }),
+            }],
+        };
+
+        set_origin_server_name(
+            &mut config,
+            "deploy-bot-ci.globalcomixdev.com",
+            "deploy-bot-ci.globalcomixdev.com",
+        )
+        .expect("existing hostname should be updated");
+
+        let value = serde_json::to_value(config).expect("configuration should serialize");
+        let origin = &value["ingress"][0]["originRequest"];
+        assert_eq!(
+            origin["originServerName"],
+            "deploy-bot-ci.globalcomixdev.com"
+        );
+        assert_eq!(origin["httpHostHeader"], "existing.example.com");
+        assert_eq!(origin["access"]["audTag"][0], "aud-tag");
+        assert!(origin.get("noTLSVerify").is_none());
+    }
 }
 
 pub async fn create(client: &Client, name: &str) -> Result<()> {

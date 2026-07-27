@@ -123,6 +123,15 @@ enum TunnelCommands {
         #[arg(long)]
         access_aud: Option<String>,
     },
+    /// Set the TLS certificate hostname for an existing ingress rule
+    SetOriginServerName {
+        /// Tunnel ID or name
+        tunnel: String,
+        /// Existing ingress hostname
+        hostname: String,
+        /// Hostname expected in the origin certificate
+        origin_server_name: String,
+    },
     /// Remove a domain/ingress rule from a tunnel
     RemoveDomain {
         /// Tunnel ID
