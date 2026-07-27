@@ -364,7 +364,7 @@ fn set_origin_server_name(
             anyhow::anyhow!("Hostname '{}' not found in tunnel configuration", hostname)
         })?;
 
-    let origin_request = rule.origin_request.get_or_insert_with(|| OriginRequest {
+    let origin_request = rule.origin_request.get_or_insert(OriginRequest {
         access: None,
         no_tls_verify: None,
         http_host_header: None,
