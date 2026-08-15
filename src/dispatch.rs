@@ -3,9 +3,9 @@ use anyhow::{Result, bail};
 use crate::client::Client;
 use crate::commands;
 use crate::{
-    AnalyticsCommands, AppCommands, CacheCommands, Commands, DnsCommands, FirewallCommands,
-    GatewayCommands, RateLimitingCommands, RumCommands, TokenCommands, TunnelCommands,
-    TurnstileCommands, WaitingRoomCommands, ZoneCommands,
+    AbuseCommands, AnalyticsCommands, AppCommands, CacheCommands, Commands, DnsCommands,
+    FirewallCommands, GatewayCommands, RateLimitingCommands, RumCommands, TokenCommands,
+    TunnelCommands, TurnstileCommands, WaitingRoomCommands, ZoneCommands,
 };
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -24,6 +24,7 @@ pub async fn dispatch_command(command: Commands, client: &Client) -> Result<()> 
         Commands::Rum { action } => dispatch_rum(action, client).await,
         Commands::RateLimiting { action } => dispatch_rate_limiting(action, client).await,
         Commands::Analytics { action } => dispatch_analytics(action, client).await,
+        Commands::Abuse { action } => dispatch_abuse(action, client).await,
         Commands::Config { .. } => unreachable!(),
     }
 }
@@ -264,6 +265,16 @@ async fn dispatch_rate_limiting(action: RateLimitingCommands, client: &Client) -
         RateLimitingCommands::List { zone } => commands::rate_limiting::list(client, &zone).await,
         RateLimitingCommands::Get { zone, rule_id } => {
             commands::rate_limiting::get(client, &zone, &rule_id).await
+        }
+    }
+}
+
+#[cfg_attr(coverage_nightly, coverage(off))]
+async fn dispatch_abuse(action: AbuseCommands, client: &Client) -> Result<()> {
+    match action {
+        AbuseCommands::List => commands::abuse::list(client).await,
+        AbuseCommands::Show { report_id, json } => {
+            commands::abuse::show(client, &report_id, json).await
         }
     }
 }

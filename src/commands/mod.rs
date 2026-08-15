@@ -1,4 +1,6 @@
 #[cfg_attr(coverage_nightly, coverage(off))]
+pub mod abuse;
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub mod analytics;
 #[cfg_attr(coverage_nightly, coverage(off))]
 pub mod applications;

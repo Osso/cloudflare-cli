@@ -90,6 +90,11 @@ enum Commands {
         #[command(subcommand)]
         action: AnalyticsCommands,
     },
+    /// Abuse reports (DMCA, etc.)
+    Abuse {
+        #[command(subcommand)]
+        action: AbuseCommands,
+    },
     /// Configure API credentials
     Config {
         #[command(subcommand)]
@@ -518,6 +523,20 @@ enum AnalyticsCommands {
         /// Number of days to look back (default: 1, max: 30)
         #[arg(long, short, default_value = "1")]
         days: u32,
+    },
+}
+
+#[derive(Subcommand)]
+enum AbuseCommands {
+    /// List abuse reports
+    List,
+    /// Show details of an abuse report
+    Show {
+        /// Report ID (e.g. eebcab2542155a49)
+        report_id: String,
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
     },
 }
 
