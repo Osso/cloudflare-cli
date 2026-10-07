@@ -1,5 +1,6 @@
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 use super::ApiResponse;
 use crate::client::Client;
@@ -32,6 +33,10 @@ pub struct TunnelConfig {
 pub struct TunnelConfigInner {
     #[serde(default)]
     pub ingress: Vec<IngressRule>,
+    // Configuration updates replace the entire config. Keep settings the CLI
+    // does not model (including global originRequest and warp-routing).
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -47,6 +52,8 @@ pub struct IngressRule {
         skip_serializing_if = "Option::is_none"
     )]
     pub origin_request: Option<OriginRequest>,
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -71,6 +78,8 @@ pub struct OriginRequest {
         skip_serializing_if = "Option::is_none"
     )]
     pub origin_server_name: Option<String>,
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -81,6 +90,8 @@ pub struct AccessConfig {
     pub required: bool,
     #[serde(default, rename = "teamName")]
     pub team_name: String,
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, serde_json::Value>,
 }
 
 pub async fn list(client: &Client) -> Result<()> {
@@ -260,7 +271,9 @@ async fn get_config(client: &Client, tunnel_id: &str) -> Result<TunnelConfig> {
                 service: "http_status:404".to_string(),
                 path: None,
                 origin_request: None,
+                extra: BTreeMap::new(),
             }],
+            extra: BTreeMap::new(),
         });
     }
     Ok(config)
@@ -295,6 +308,7 @@ fn build_access_config(access_aud: Option<&str>) -> Option<AccessConfig> {
         aud_tag: vec![aud.to_string()],
         required: true,
         team_name: "globalcomixdev".to_string(),
+        extra: BTreeMap::new(),
     })
 }
 
@@ -308,7 +322,9 @@ fn build_ingress_rule(hostname: &str, service: &str, access: Option<AccessConfig
             no_tls_verify: None,
             http_host_header: None,
             origin_server_name: None,
+            extra: BTreeMap::new(),
         }),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -369,6 +385,7 @@ fn set_origin_server_name(
         no_tls_verify: None,
         http_host_header: None,
         origin_server_name: None,
+        extra: BTreeMap::new(),
     });
     origin_request.origin_server_name = Some(origin_server_name.to_string());
     Ok(())
@@ -470,6 +487,152 @@ struct CreatedTunnel {
 mod tests {
     use super::*;
 
+    fn configured_tunnel() -> serde_json::Value {
+        serde_json::json!({
+            "config": {
+                "originRequest": {
+                    "connectTimeout": 30,
+                    "caPool": "/etc/cloudflared/global-ca.pem",
+                    "access": {"required": true, "futureOption": ["global"]}
+                },
+                "warp-routing": {"enabled": true, "futureOption": {"limit": 100}},
+                "futureConfig": {"enabled": false, "values": [1, null, "value"]},
+                "ingress": [
+                    {
+                        "hostname": "app.example.com",
+                        "service": "https://localhost:8443",
+                        "path": "/api/.*",
+                        "futureRule": {"enabled": true},
+                        "originRequest": {
+                            "noTLSVerify": false,
+                            "httpHostHeader": "existing.example.com",
+                            "originServerName": "old.example.com",
+                            "caPool": "/etc/cloudflared/app-ca.pem",
+                            "connectTimeout": 45,
+                            "http2Origin": true,
+                            "futureOrigin": {"values": [false, null, 2]},
+                            "access": {
+                                "required": true,
+                                "teamName": "example",
+                                "audTag": ["aud-tag"],
+                                "futureAccess": {"values": ["one", "two"]}
+                            }
+                        }
+                    },
+                    {
+                        "hostname": "other.example.com",
+                        "service": "http://localhost:8080",
+                        "originRequest": {"connectTimeout": 10, "caPool": "other.pem"}
+                    },
+                    {"service": "http_status:404", "futureCatchAll": null}
+                ]
+            }
+        })
+    }
+
+    #[test]
+    fn configuration_round_trip_preserves_unknown_settings() {
+        let expected = configured_tunnel();
+        let config: TunnelConfig = serde_json::from_value(expected.clone()).unwrap();
+
+        assert_eq!(serde_json::to_value(config).unwrap(), expected);
+    }
+
+    #[test]
+    fn origin_server_name_edit_preserves_the_rest_of_the_put_payload() {
+        let mut expected = configured_tunnel();
+        // GET-only metadata must not be copied into the configuration PUT.
+        let mut response = expected.clone();
+        response["version"] = serde_json::json!(7);
+        response["source"] = serde_json::json!("cloudflare");
+        let mut config: TunnelConfig = serde_json::from_value(response).unwrap();
+
+        set_origin_server_name(
+            config.config.as_mut().unwrap(),
+            "app.example.com",
+            "new.example.com",
+        )
+        .unwrap();
+        expected["config"]["ingress"][0]["originRequest"]["originServerName"] =
+            serde_json::json!("new.example.com");
+
+        assert_eq!(serde_json::to_value(config).unwrap(), expected);
+    }
+
+    #[test]
+    fn adding_a_domain_preserves_existing_configuration() {
+        let mut expected = configured_tunnel();
+        let mut config: TunnelConfig = serde_json::from_value(expected.clone()).unwrap();
+        let inner = config.config.as_mut().unwrap();
+        ensure_hostname_not_present(inner, "new.example.com").unwrap();
+        let rule = build_ingress_rule(
+            "new.example.com",
+            "http://localhost:9000",
+            build_access_config(Some("new-aud")),
+        );
+        let position = find_insert_position(inner);
+        assert_eq!(position, 2);
+        inner.ingress.insert(position, rule);
+        expected["config"]["ingress"]
+            .as_array_mut()
+            .unwrap()
+            .insert(
+                position,
+                serde_json::json!({
+                    "hostname": "new.example.com",
+                    "service": "http://localhost:9000",
+                    "originRequest": {
+                        "access": {
+                            "audTag": ["new-aud"],
+                            "required": true,
+                            "teamName": "globalcomixdev"
+                        }
+                    }
+                }),
+            );
+
+        assert_eq!(serde_json::to_value(config).unwrap(), expected);
+    }
+
+    #[test]
+    fn removing_a_domain_preserves_remaining_configuration() {
+        let mut expected = configured_tunnel();
+        let mut config: TunnelConfig = serde_json::from_value(expected.clone()).unwrap();
+        config
+            .config
+            .as_mut()
+            .unwrap()
+            .ingress
+            .retain(|rule| rule.hostname.as_deref() != Some("other.example.com"));
+        expected["config"]["ingress"]
+            .as_array_mut()
+            .unwrap()
+            .remove(1);
+
+        assert_eq!(serde_json::to_value(config).unwrap(), expected);
+    }
+
+    #[test]
+    fn origin_server_name_can_be_added_when_origin_request_is_absent() {
+        let mut expected = serde_json::json!({
+            "config": {
+                "warp-routing": {"enabled": true},
+                "ingress": [{"hostname": "app.example.com", "service": "https://localhost"}]
+            }
+        });
+        let mut config: TunnelConfig = serde_json::from_value(expected.clone()).unwrap();
+        set_origin_server_name(
+            config.config.as_mut().unwrap(),
+            "app.example.com",
+            "new.example.com",
+        )
+        .unwrap();
+        expected["config"]["ingress"][0]["originRequest"] =
+            serde_json::json!({"originServerName": "new.example.com"});
+
+        assert_eq!(serde_json::to_value(config).unwrap(), expected);
+    }
+
     #[test]
     fn set_origin_server_name_preserves_existing_origin_settings() {
         let mut config = TunnelConfigInner {
@@ -482,12 +645,16 @@ mod tests {
                         aud_tag: vec!["aud-tag".to_string()],
                         required: true,
                         team_name: "globalcomixdev".to_string(),
+                        extra: BTreeMap::new(),
                     }),
                     no_tls_verify: None,
                     http_host_header: Some("existing.example.com".to_string()),
                     origin_server_name: None,
+                    extra: BTreeMap::new(),
                 }),
+                extra: BTreeMap::new(),
             }],
+            extra: BTreeMap::new(),
         };
 
         set_origin_server_name(
